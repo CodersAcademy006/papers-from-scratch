@@ -58,3 +58,56 @@ First run failed:
 AssertionError: layer 0 W(1, 9): analytic=-0.00000005 numeric=-0.00000005 rel_err=1.01e-03
 ```
 Both values print identically at 8 decimal places, yet the check reported a 1000x-tolerance relative error. The parameter sampled happened to belong to a hidden unit that was dropped (masked to zero) in the one forward pass used for this check, so its true gradient is genuinely ~0 on both sides — and pure relative error (`|num-ana| / max(|num|,|ana|)`) is numerically unstable exactly when both quantities are near zero, regardless of whether the implementation is correct. This is not a bug in `backward()`; it's a bug in the *check itself* for near-zero gradients. Fixed by switching to a combined absolute+relative tolerance (`np.isclose(num, ana, rtol=1e-4, atol=1e-6)`, the same two-term criterion `numpy.allclose` uses internally) instead of pure relative error. Re-ran: **passed, 24 sampled parameters across 3 layers, worst relative error 1.78e-03** (the same near-zero case as before, now correctly accepted since its absolute difference is ~1e-10, far under the 1e-6 floor).
+
+## Entry 6 — Three real bugs, found by actually running it
+
+`run_experiment.py`: 784-256-128-10 network, 2000-example MNIST training subset (full 10,000-example test set), two runs (no-dropout vs. dropout) differing only in dropout, otherwise identical architecture/optimizer/constraint (see Entry 3). First full run, both conditions: **completely flat at ~0.90 error for all 300 epochs**, no learning whatsoever. Debugged this properly rather than shipping a broken result, in order:
+
+**(a) Confirmed the network had collapsed to predicting a constant class.** Checked MNIST test-label frequencies directly: digit "1" is 1135/10000 = 11.35% of the test set, so always predicting "1" gives error `1 - 0.1135 = 0.8865` — exactly the value the flat runs kept returning. Not a coincidence; the network genuinely wasn't discriminating between inputs at all.
+
+**(b) Found the momentum schedule was backwards.** The formula transcribed into Entry 2 from the extracted PDF text, `p_t = (t/T)*p_i + (1-t/T)*p_f`, evaluated numerically: at `t=0` it gives `p_0 = p_f = 0.99`, decreasing to `p_0.5` at `t=499`, then **jumping discontinuously back up to 0.99 at t=500**. This directly contradicts the paper's own plain-English description a few lines earlier in the same appendix: *"the momentum starts off at a value of 0.5 and is increased linearly to 0.99 over the first 500 epochs, after which it stays at 0.99."* That sentence is unambiguous and requires a continuous ramp from 0.5 to 0.99, which the transcribed formula does not produce. This is almost certainly a transcription artifact from PDF-to-text extraction garbling which fraction (`t/T` vs `1-t/T`) multiplies which endpoint (`p_i` vs `p_f`), not an error in the published paper. Fixed by implementing the schedule the prose actually describes: `p_t = p_i + (t/T)*(p_f - p_i)`, continuous at `t=T`. Verified numerically (see the comparison table run during debugging) that this version is continuous at the boundary while the transcribed one is not.
+
+**(c) Found a sum-vs-average gradient mismatch.** `backward()` (same as 01_backprop_autograd's convention) returns gradients **summed** over the minibatch, matching eq (3)'s `sum_c` form. But Appendix A.1's update rule explicitly calls for `<grad_w L>_t`, stated in the text as *"the average over the i-th batch of the derivative of the objective."* Training was using the summed gradient directly with `epsilon_0 = 10.0`, i.e. an effective learning rate ~100x (the minibatch size) larger than the paper intended. Fixed by dividing `grads_W`/`grads_b` by the batch size in the training loop itself (not inside `backward()`, to avoid touching the already-gradchecked summed-convention code — see the comment in `run_experiment.py`).
+
+**Neither (b) nor (c) alone fixed it.** Re-ran with both fixes: still flat at the same degenerate error. Had to actually instrument the forward pass to find the real proximate cause: printed per-layer mean activation and raw gradient magnitude across early epochs. Second hidden layer's mean activation was `1.99e-11` — **fully sigmoid-saturated, dead** — from epoch 0 onward, and first-layer gradients collapsed from `1.76e-4` (epoch 0, pre-update) to `4.5e-10` (epoch 1 onward). The pattern is a classic sigmoid-death cascade: one oversized first weight update pushed the second hidden layer's pre-activations deep into saturation; `sigmoid'(x) = y(1-y) -> 0` there, so no gradient signal could ever reach layer 1 or layer 0 again, permanently freezing the network one step after initialization.
+
+**(d) Root cause: `epsilon_0 = 10.0` (the paper's literal value) is simply too large for this architecture/data scale, even with (b) and (c) fixed.** Swept `epsilon_0 in {10.0, 1.0, 0.5, 0.2}`, training 40 epochs each and checking whether the second hidden layer stayed alive (non-zero variance across examples):
+
+```
+eps0=10.00  after 40 epochs: train_err=0.9070  hidden2 mean=0.0000 std=0.0000   (dead)
+eps0= 1.00  after 40 epochs: train_err=0.3100  hidden2 mean=0.1386 std=0.1722   (alive, learning)
+eps0= 0.50  after 40 epochs: train_err=0.6600  hidden2 mean=0.0902 std=0.0721   (alive, slower)
+eps0= 0.20  after 40 epochs: train_err=0.8220  hidden2 mean=0.2984 std=0.0130   (alive, too slow)
+```
+
+`epsilon_0 = 10.0` kills the network even with the other two bugs fixed; `1.0` learns fastest without dying. This isn't surprising in hindsight: the paper's `epsilon_0 = 10.0` was tuned for *their* setup (784-800-800-10, 60,000 training examples, 3000 epochs) — a value calibrated for one architecture/data/duration combination has no reason to transfer unchanged to a deliberately smaller one chosen for CPU tractability (Entry 3). Switched to `epsilon_0 = 1.0`, found empirically, documented as a deviation rather than silently swapped in.
+
+With all three fixes, a 300-epoch, no-dropout control run on its own (before even touching the dropout condition) produced a clean, textbook overfitting curve: train error reaches exactly `0.0000` by epoch 120 (perfect memorization of 2000 examples) while test error plateaus at `~0.103-0.108` from epoch 90 onward and never recovers — precisely the failure mode the paper's abstract opens with.
+
+## Entry 7 — Final result and comparison to the paper's claim
+
+With the real bugs fixed, both conditions trained for the full 300 epochs, 2000-example training subset, full 10,000-example test set:
+
+```
+FINAL no-dropout: train_err=0.0000 test_err=0.1032 gap=0.1032
+FINAL dropout:    train_err=0.0295 test_err=0.0868 gap=0.0573
+```
+
+![Train/test error curves, no-dropout vs dropout](figures/overfitting_comparison.png)
+
+![Generalization gap over training, both conditions overlaid](figures/generalization_gap.png)
+
+Dropout here does exactly what the paper claims, on both measures that matter:
+
+- **Lower test error in absolute terms**: 8.68% vs. 10.32%, a ~16% relative reduction — qualitatively the same direction as every one of the paper's own headline numbers (MNIST 160->110 errors, TIMIT 22.7%->19.7%, CIFAR-10 18.5%->15.6%, ImageNet 48.6%->42.4%, Reuters 31.05%->29.62%), though not the same magnitude, since this is a different architecture/dataset scale by design (Entry 3).
+- **Smaller generalization gap**: 0.0573 vs. 0.1032, roughly halved. The no-dropout run's train error hits exactly zero (full memorization) by epoch 120 and its test error is flat/stuck from there on; the dropout run's train error is still at 2.95% (not zero) at epoch 300 and both its train and test curves are still visibly decreasing — dropout is doing what the paper's "cannot rely on other hidden units being present" framing predicts: slower to memorize, because co-adapted shortcuts the network could otherwise lean on keep getting randomly knocked out.
+
+This is a stronger, more isolated demonstration of the mechanism than the paper's own comparison for one reason worth restating (first raised as a plan in Entry 3, now actually true of the result): every hyperparameter except dropout itself (architecture, max-norm bound, momentum/learning-rate schedule, training subset, epoch count) is identical between the two runs here, whereas the paper's quoted "best published result... for a standard feedforward neural network" baseline (160 errors) came from an entirely different, unspecified training setup, not the same code with dropout switched off.
+
+## Entry 8 — What could be improved
+
+- **The three bugs in Entry 6 are all artifacts of not matching the paper's exact scale**, not of the dropout mechanism itself (which gradcheck already validated in isolation). A more complete treatment would also try the paper's literal `epsilon_0=10.0` on something closer to its actual 800-unit/60k-example/3000-epoch setup, to see whether that specific combination avoids the sigmoid-death cascade that appears at this smaller scale — left undone here because that's exactly the CPU-runtime wall Entry 3 scoped around.
+- **Momentum formula discrepancy (Entry 6b) was resolved by trusting the paper's prose over the paper's own extracted formula**, which is a judgment call, not a certainty — it's possible the actual published formula is exactly as extracted and the prose is the loose/simplified description, though the discontinuity at `t=T` makes that less likely. Worth a second look at the original Nature-style PDF rendering (table/fraction layout) directly rather than only the alphaxiv-extracted text, if this ever matters more precisely.
+- **No ReLU variant tried.** Entry 5 already flags that the paper doesn't specify the nonlinearity for this experiment; sigmoid was chosen to match the era, but ReLU (which the paper does use explicitly for its CIFAR-10/ImageNet conv nets, Appendix F.3) is far less prone to exactly the saturation failure mode in Entry 6c-d, and would be worth trying as a robustness check on whether these three bugs are sigmoid-specific.
+- **Single seed per condition.** The reported gap (0.1032 vs 0.0573) comes from one random seed each; given how close early-training dynamics are between the two runs in the generalization-gap figure (noisy, overlapping before epoch ~50), a seed sweep (same spirit as 01_backprop_autograd's 100-seed local-minima sweep) would make the final gap numbers more defensible than a single run currently does.
+- **Input dropout rate (20%) and max-norm bound (l=15) were taken directly from the paper's own MNIST appendix values and not independently tuned for this smaller architecture**, unlike `epsilon_0` which had to be re-tuned to avoid the sigmoid-death failure. It's possible these two also have scale-dependent optimal values that happen to not break anything visibly at this scale, the same way `epsilon_0=10` visibly broke things — not verified either way.
