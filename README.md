@@ -2,10 +2,10 @@
 
 Hard research papers, implemented from scratch. No framework shortcuts — build the actual mechanism (autograd, attention, tokenizer, optimizer, etc.), not a wrapper around an existing library. This list is not capped; more papers get added over time.
 
-Implemented so far: 0
+Implemented so far: 1
 
 ## A. Core autodiff & training infra
-- [ ] 01 [Learning representations by back-propagating errors](https://www.nature.com/articles/323533a0) (Rumelhart, Hinton, Williams 1986) — `01_backprop_autograd/`
+- [x] 01 [Learning representations by back-propagating errors](https://www.nature.com/articles/323533a0) (Rumelhart, Hinton, Williams 1986) — `01_backprop_autograd/` ([journal](01_backprop_autograd/JOURNAL.md))
 - [ ] 02 [Dropout](https://arxiv.org/abs/1207.0580) (Hinton et al 2012) — `02_dropout/`
 - [ ] 03 [Batch Normalization](https://arxiv.org/abs/1502.03167) (2015) — `03_batchnorm/`
 - [ ] 04 [Adam](https://arxiv.org/abs/1412.6980) (2014) — `04_adam/`
