@@ -16,10 +16,11 @@ class Dropout:
         self.keep_prob = keep_prob
 
     def forward(self, x, train, rng):
+        self.train = train
         if train:
             self.mask = (rng.random(x.shape) < self.keep_prob).astype(x.dtype)
             return x * self.mask
         return x * self.keep_prob  # test-time scaling, Section 4.2
 
     def backward(self, dout):
-        return dout * self.mask
+        return dout * self.mask if self.train else dout * self.keep_prob

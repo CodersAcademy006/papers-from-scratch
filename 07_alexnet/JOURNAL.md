@@ -186,3 +186,58 @@ scale-down of the paper's 96/256/384/384/256 and 4096/4096 for a
 10-class, 32x32 problem, not derived from any formula in the paper —
 flagged as a judgment call, not a literal reproduction of a number the
 paper specifies.
+
+## Entry 5 — Composing the network: a real ordering bug, caught by gradcheck
+
+`alexnet_cifar.py` wires conv1->LRN->pool1->conv2->LRN->pool2->conv3->
+conv4->conv5->pool5->fc6->drop->fc7->drop->fc8 together. First full
+gradcheck run crashed, not just failed:
+
+```
+ValueError: operands could not be broadcast together with shapes (3,64,3,3) (3,64,7,7)
+```
+
+Two real bugs, both caught before any training run:
+
+1. `Dropout.backward()` assumed `self.mask` always exists, but
+   `forward(train=False)` (used for the gradcheck, so dropout is a
+   deterministic scale rather than a random mask) never sets it. Fixed
+   by tracking `self.train` in `forward()` and branching in `backward()`
+   to match — scale by `keep_prob` in both directions when not training,
+   same as `forward()` does.
+2. The actual crash: `backward()` applied conv5's output ReLU mask
+   (`self._relu5 > 0`, shape `(N,64,7,7)`) to the gradient *before*
+   calling `pool5.backward()` to undo the pooling, instead of after —
+   at that point in the backward pass the gradient was still in the
+   pooled shape `(N,64,3,3)`. Fixed by calling `pool5.backward()` first
+   to get back to the pre-pool `(N,64,7,7)` shape, then applying the
+   ReLU mask, matching the actual forward order (conv5 -> ReLU -> pool).
+
+After both fixes, `test_alexnet_gradcheck.py` runs to completion, all 16
+parameter groups:
+
+```
+conv1.W: 6.14e-02   conv1.b: 1.65e-03   conv2.W: 1.27e-04  conv2.b: 3.20e-06
+conv3.W: 1.87e-01   conv3.b: 6.66e-05   conv4.W: 2.79e-05  conv4.b: 5.34e-06
+conv5.W: 3.38e-08   conv5.b: 9.10e-09   fc6.W:   4.18e-08  fc6.b:   8.44e-08
+fc7.W:   1.44e-09   fc7.b:   1.45e-09   fc8.W:   1.34e-10  fc8.b:   6.17e-10
+```
+
+`conv1.W` and `conv3.W` look alarming at a glance (worst relative error
+6.14e-02 and 1.87e-01, both far above this repo's usual `1e-3` bar) —
+worth explaining honestly rather than letting the headline "passed"
+message paper over it. Checked the actual gradient magnitudes directly:
+`conv1.W`'s largest gradient over the whole array is `2.1e-07`, `conv3.W`'s
+is `7.1e-06` — both analytic and numeric values are simply tiny at the
+sampled indices, so the *relative* error is large while the *absolute*
+error clears this repo's `1e-4` floor easily (the same `REL_TOL`-vs-
+`ABS_TOL` pattern as 06_lenet5 entry 5's `C3.W`, for the same underlying
+reason: these are the earliest layers in a five-conv-layer chain, so
+their gradient has the most LRN/pooling/ReLU derivatives compounded onto
+it by the time it arrives from the loss). Checked `relu1`-`relu5`'s
+fraction of nonzero units directly to rule out a dead-network explanation
+instead: `relu1`=50%, `relu2`=100%, `relu3`=49%, `relu4`=100%, `relu5`=100%
+— `conv2`/`conv4`/`conv5` being fully active is the paper's own
+`bias_init=1.0` design working exactly as intended ("this initialization
+accelerates the early stages of learning by providing the ReLUs with
+positive inputs," entry 2), not a sign of a broken or dead layer.
