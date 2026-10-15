@@ -4,14 +4,14 @@ Hard research papers, implemented from scratch. No framework shortcuts — build
 
 **Browse: [codersacademy006.github.io/papers-from-scratch](https://codersacademy006.github.io/papers-from-scratch/)** — clickable index into every journal, one paper at a time.
 
-Implemented so far: 4
+Implemented so far: 5
 
 ## A. Core autodiff & training infra
 - [x] 01 [Learning representations by back-propagating errors](https://www.nature.com/articles/323533a0) (Rumelhart, Hinton, Williams 1986) — `01_backprop_autograd/` ([journal](01_backprop_autograd/JOURNAL.md))
 - [x] 02 [Dropout](https://arxiv.org/abs/1207.0580) (Hinton et al 2012) — `02_dropout/` ([journal](02_dropout/JOURNAL.md))
 - [x] 03 [Batch Normalization](https://arxiv.org/abs/1502.03167) (2015) — `03_batchnorm/` ([journal](03_batchnorm/JOURNAL.md))
 - [x] 04 [Adam](https://arxiv.org/abs/1412.6980) (2014) — `04_adam/` ([journal](04_adam/JOURNAL.md))
-- [ ] 05 [Layer Normalization](https://arxiv.org/abs/1607.06450) (2016) — `05_layernorm/`
+- [x] 05 [Layer Normalization](https://arxiv.org/abs/1607.06450) (2016) — `05_layernorm/` ([journal](05_layernorm/JOURNAL.md))
 
 ## B. CNN / vision classics
 - [ ] 06 [LeNet-5](https://ieeexplore.ieee.org/document/726791) (LeCun et al 1998) — `06_lenet5/`
