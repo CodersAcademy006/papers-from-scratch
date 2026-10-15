@@ -139,3 +139,111 @@ job, not this optimizer paper's); Section 4's regret-bound proof and
 AdaMax/temporal-averaging extensions (Sections 7.1, 7.2) -- interesting,
 but they're each a distinct secondary mechanism layered on top of the
 paper's actual contribution, not needed to validate Adam itself.
+
+## Entry 4 — The two abstract claims, checked exactly (not approximately)
+
+`test_optimizer_properties.py` checks the two claims pulled out in entry 2,
+plus a plain convergence sanity check first. All three passed on the first
+run, no debugging:
+
+```
+quadratic convergence check passed, max abs error = 2.78e-17
+rescaling invariance check passed: max update difference between 1x and
+  100x gradient scale = 0.0000 (typical update size 0.0025)
+AdaGrad correspondence check passed: worst relative trajectory difference
+  over 200 steps = 0.0000
+```
+
+Worth dwelling on the second and third results specifically, since
+`0.0000` is a stronger result than expected going in. The rescaling-
+invariance claim ("the effective magnitude of the steps... are
+APPROXIMATELY bounded") is hedged in the paper's own wording, so the test
+was written expecting a *small but nonzero* difference between the 1x and
+100x gradient-scale trajectories (hence the loose tolerance in the assert).
+Getting an exact `0.0000` instead makes sense on reflection: with `eps`'s
+effect negligible at this gradient scale, `m_hat`'s numerator and `v_hat`'s
+square-rooted denominator really do scale by exactly `c` and `c`
+respectively (since `sqrt(c^2) = c` for `c>0`), at every single timestep,
+not just in the limit — the "approximately" in the paper's text is hedging
+against the `eps` term and pathological edge cases, not against this being
+false in a clean synthetic test.
+
+Likewise, the AdaGrad correspondence isn't a loose analogy — plugging
+`beta1=0`, `beta2 -> 1`, `alpha_t = alpha/sqrt(t)` into Adam's update and
+simplifying algebraically really does collapse to AdaGrad's update exactly
+(this is literally what the paper's Section 5 paragraph derives, step by
+step, before stating the correspondence in prose) — so an exact match
+between the two implementations, run independently on the same gradient
+sequence, is the correct outcome, and a useful cross-check that both
+`optimizer.py` classes are actually implementing what they claim to.
+
+## Entry 5 — ReLU MLP for the 6.2 comparison, and the one deliberate simplification
+
+`mlp_relu.py` is Section 6.2's network: 784-1000-1000-10, ReLU hidden units,
+softmax+cross-entropy output, L2 weight decay. One deliberate
+simplification not flagged until now: the paper's own baseline is "SGD
+with Nesterov momentum" ("SGDNesterov" in Figures 1-3), but `optimizer.py`
+only implements classical (non-Nesterov) momentum. Nesterov's lookahead
+step is a genuinely different update rule (evaluate the gradient at the
+momentum-projected point, not the current point), not a one-line variant
+of plain momentum, and the point of this paper's exercise is Adam, not
+re-deriving Nesterov acceleration -- so plain momentum stands in as the
+"classical adaptive-ish baseline," documented as weaker evidence than the
+paper's own SGDNesterov comparison, not as equivalent to it.
+
+## Entry 6 — A real ReLU-kink gradcheck failure, traced to a structural zero
+
+First `test_gradcheck.py` run failed immediately:
+
+```
+AssertionError: param 4 idx (0,): analytic=0.02865436 numeric=0.02699575 rel_err=5.79e-02
+```
+
+Param 4 is `b[1]`, the second hidden layer's bias. Before assuming a bug in
+`backward()` (which had already passed on 02_dropout's and 03_batchnorm's
+harder cases), checked the actual pre-activations at that layer for this
+batch:
+
+```
+z1[:,0] values: [ 1.23e-05 -1.01e-03  4.91e-05 -1.10e-03 -2.76e-04 -1.41e-03
+                   4.75e-05 -6.19e-05  0.00000000e+00  3.79e-04]
+min abs: 0.0
+```
+
+Example 8's pre-activation is **exactly** 0.0 — not close to zero,
+precisely zero. Perturbing `b[1][0]` by `+-1e-5` (the finite-difference
+step) shifts every example's pre-activation by that same amount, which for
+example 8 means the perturbed-up version is ReLU-active and the
+perturbed-down version is ReLU-inactive. The finite-difference quotient
+then measures something the analytic gradient's fixed one-sided convention
+(`z > 0` evaluated at the unperturbed `z=0`, which Python's `>` resolves
+to False/inactive) doesn't capture — a real discontinuity in a piecewise-
+linear function, not a coding mistake.
+
+First instinct was to try a different random seed, assuming this was a
+rare coincidence. It wasn't: swept seeds 0-19 and every single one produced
+a pre-activation within `1e-4` of zero somewhere in the network (several
+within `1e-6`). The real cause: `ReLUMLP`'s `weight_std=0.01` default
+(matching every other paper's init scale in this repo, chosen for
+consistency, not for this network specifically) keeps every pre-activation
+clustered tightly around zero — and worse, example 8's entire FIRST hidden
+layer was already all-zero (every one of its 6 units inactive for that
+example), which forces the second layer's pre-activation to be *exactly*
+zero for that example regardless of the second layer's weight scale at
+all — rescaling `weight_std` can't fix a problem caused one layer
+upstream.
+
+Fix: rather than loosening the tolerance (which would hide real bugs, not
+just kink artifacts) or hunting for a lucky seed (which the sweep showed
+doesn't reliably exist), `test_gradcheck.py` now computes, per hidden
+layer, which output units have pre-activations safely away from zero
+(`> 1e-3`) for every example in the batch, and only samples check-points
+from that safe set. This run: 41 of 59 candidate (parameter, unit) pairs
+were excluded as kink-adjacent — a much larger fraction than expected,
+confirming this is a real, pervasive property of small-weight-std ReLU
+networks on small batches, not a one-off fluke. The filtered check passes
+cleanly:
+
+```
+gradcheck passed, 18 params sampled (41 skipped as kink-adjacent), worst relative error = 1.96e-06
+```
