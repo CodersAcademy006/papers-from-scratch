@@ -1,5 +1,15 @@
-"""CIFAR-10 loader. Downloads the standard Python-pickle distribution
-(Krizhevsky's own host) and returns NCHW float arrays in [0,1]."""
+"""
+CIFAR-10 loader. Downloads the standard Python-pickle distribution
+(Krizhevsky's own host) and returns NCHW float arrays.
+
+Preprocessing matches the paper's own Section 2 exactly: "we did not
+pre-process the images in any other way, except for subtracting the
+mean activity over the training set from each pixel." Pixels stay on
+their native 0-255 scale (mean-subtracted, not additionally rescaled
+to [0,1]) -- rescaling to [0,1] turned out to matter in practice: see
+JOURNAL.md entry 6 for how a 0-1 scale silently broke training by
+making Section 5's own bias_init=1.0 swamp the input-dependent signal.
+"""
 import os
 import pickle
 import subprocess
@@ -26,7 +36,7 @@ def _ensure_downloaded():
 def _load_batch(path):
     with open(path, "rb") as f:
         d = pickle.load(f, encoding="bytes")
-    X = d[b"data"].reshape(-1, 3, 32, 32).astype(np.float64) / 255.0
+    X = d[b"data"].reshape(-1, 3, 32, 32).astype(np.float64)
     y = np.array(d[b"labels"], dtype=np.int64)
     return X, y
 
@@ -48,4 +58,8 @@ def load_cifar10():
     X_train = np.concatenate(X_train)
     y_train = np.concatenate(y_train)
     X_test, y_test = _load_batch(os.path.join(EXTRACT_DIR, "test_batch"))
+
+    mean_image = X_train.mean(axis=0)
+    X_train -= mean_image
+    X_test -= mean_image
     return X_train, y_train, X_test, y_test

@@ -15,23 +15,27 @@ from dense import Dense
 class AlexNetCIFAR:
     def __init__(self, seed=0):
         s = iter(range(seed * 100, seed * 100 + 10))
-        # Section 5: bias=1 in conv layers 2/4/5 and hidden FC layers, 0 elsewhere.
+        # Section 5's bias=1 (conv2/4/5, hidden FC) was meant to accelerate
+        # ReLUs under the paper's own flat std=0.01 init. With He init
+        # (conv2d.py, dense.py; JOURNAL.md entry 6) that rationale no longer
+        # applies -- bias=1 would just reintroduce the same bias-dominates-
+        # the-signal problem at a different layer, so bias is 0 everywhere.
         self.conv1 = Conv2D(3, 32, 5, stride=1, padding=2, bias_init=0.0, seed=next(s))
         self.lrn1 = LRN()
         self.pool1 = MaxPool(3, 2)
 
-        self.conv2 = Conv2D(32, 64, 5, stride=1, padding=2, bias_init=1.0, seed=next(s))
+        self.conv2 = Conv2D(32, 64, 5, stride=1, padding=2, bias_init=0.0, seed=next(s))
         self.lrn2 = LRN()
         self.pool2 = MaxPool(3, 2)
 
         self.conv3 = Conv2D(64, 96, 3, stride=1, padding=1, bias_init=0.0, seed=next(s))
-        self.conv4 = Conv2D(96, 96, 3, stride=1, padding=1, bias_init=1.0, seed=next(s))
-        self.conv5 = Conv2D(96, 64, 3, stride=1, padding=1, bias_init=1.0, seed=next(s))
+        self.conv4 = Conv2D(96, 96, 3, stride=1, padding=1, bias_init=0.0, seed=next(s))
+        self.conv5 = Conv2D(96, 64, 3, stride=1, padding=1, bias_init=0.0, seed=next(s))
         self.pool5 = MaxPool(3, 2)
 
-        self.fc6 = Dense(576, 384, bias_init=1.0, activation=True, seed=next(s))
+        self.fc6 = Dense(576, 384, bias_init=0.0, activation=True, seed=next(s))
         self.drop6 = Dropout(0.5)
-        self.fc7 = Dense(384, 192, bias_init=1.0, activation=True, seed=next(s))
+        self.fc7 = Dense(384, 192, bias_init=0.0, activation=True, seed=next(s))
         self.drop7 = Dropout(0.5)
         self.fc8 = Dense(192, 10, bias_init=0.0, activation=False, seed=next(s))
 

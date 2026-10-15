@@ -49,9 +49,15 @@ class Conv2D:
         self.stride = stride
         self.padding = padding
         rng = np.random.default_rng(seed)
-        # Section 5: "weights in each layer from a zero-mean Gaussian
-        # distribution with standard deviation 0.01."
-        self.W = rng.normal(0, 0.01, size=(out_channels, in_channels, kernel_size, kernel_size))
+        # Section 5 specifies a flat std=0.01 Gaussian everywhere. At this
+        # rescaled depth/width (JOURNAL.md entry 6) that constant shrinks
+        # activation variance by roughly the same factor at every layer,
+        # compounding across 8 weight layers until the input signal is
+        # buried under the constant bias term -- confirmed via a 300-batch
+        # probe showing no loss decrease. Using He init (fan-in-scaled)
+        # instead keeps activation variance roughly constant with depth.
+        fan_in = in_channels * kernel_size * kernel_size
+        self.W = rng.normal(0, np.sqrt(2.0 / fan_in), size=(out_channels, in_channels, kernel_size, kernel_size))
         self.b = np.full(out_channels, bias_init, dtype=np.float64)
 
     def forward(self, x):

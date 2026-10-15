@@ -4,7 +4,7 @@ against finite differences."""
 import numpy as np
 from alexnet_cifar import AlexNetCIFAR
 
-EPS_FD = 1e-4
+EPS_FD = 1e-5
 REL_TOL = 1e-3
 ABS_TOL = 1e-4
 rng = np.random.default_rng(0)

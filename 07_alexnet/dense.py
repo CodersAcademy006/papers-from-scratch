@@ -1,13 +1,13 @@
-"""Fully-connected layer with ReLU, AlexNet's own init (Section 5):
-weights ~ N(0, 0.01^2), bias constant (1 for the first two hidden FC
-layers to help ReLUs start active, 0 for the output layer)."""
+"""Fully-connected layer with ReLU. He init (fan-in-scaled) instead of
+Section 5's flat std=0.01 -- see conv2d.py and JOURNAL.md entry 6 for
+why the flat constant doesn't transfer to this rescaled network."""
 import numpy as np
 
 
 class Dense:
     def __init__(self, n_in, n_out, bias_init=0.0, activation=True, seed=None):
         rng = np.random.default_rng(seed)
-        self.W = rng.normal(0, 0.01, size=(n_out, n_in))
+        self.W = rng.normal(0, np.sqrt(2.0 / n_in), size=(n_out, n_in))
         self.b = np.full(n_out, bias_init, dtype=np.float64)
         self.activation = activation
 
