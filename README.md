@@ -2,6 +2,8 @@
 
 Hard research papers, implemented from scratch. No framework shortcuts — build the actual mechanism (autograd, attention, tokenizer, optimizer, etc.), not a wrapper around an existing library. This list is not capped; more papers get added over time.
 
+**Browse: [codersacademy006.github.io/papers-from-scratch](https://codersacademy006.github.io/papers-from-scratch/)** — clickable index into every journal, one paper at a time.
+
 Implemented so far: 2
 
 ## A. Core autodiff & training infra
