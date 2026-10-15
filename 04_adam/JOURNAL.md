@@ -247,3 +247,117 @@ cleanly:
 ```
 gradcheck passed, 18 params sampled (41 skipped as kink-adjacent), worst relative error = 1.96e-06
 ```
+
+## Entry 7 — Two real findings from running the actual experiment, neither flattering
+
+**MomentumSGD is pathologically learning-rate-sensitive on this network.**
+First full run of the main comparison used `lr=0.01` for `MomentumSGD`
+(a standard-looking choice) and it barely moved:
+
+```
+[MomentumSGD] epoch 0 avg_loss=2.6847
+[MomentumSGD] epoch 7 avg_loss=2.5538
+```
+
+`-ln(0.1) = 2.303` is the loss of guessing uniformly among 10 classes, so
+this is WORSE than random guessing even by epoch 7 (the L2 term adds a
+little, but not nearly this much). Before writing this up as "MomentumSGD
+just doesn't work as well as Adam here," checked whether `optimizer.py`'s
+`MomentumSGD` itself was broken: ran it on the same convex-quadratic
+sanity check `test_optimizer_properties.py` already uses for Adam.
+
+```
+MomentumSGD: max abs error after 2000 steps = 0.000000
+```
+
+Exact convergence — the optimizer is correct. So the problem is specific
+to this network/learning-rate combination. Swept `lr` for `MomentumSGD` on
+the real network (2 epochs each, to keep this cheap):
+
+```
+lr=0.010: epoch0=2.6847  epoch1=2.5658   (barely moving)
+lr=0.015: epoch0=2.86e14 epoch1=3.05e14  (exploded)
+lr=0.020: epoch0=8.4728  epoch1=8.3083   (bad, but not exploded)
+lr=0.025: epoch0=1.18e4  epoch1=1.21e4   (exploded)
+lr=0.030: epoch0=4.76e53 epoch1=4.92e53  (exploded)
+lr=0.050: epoch0=2.05e28 epoch1=2.09e28  (exploded)
+lr=0.100: epoch0=1.34e61 epoch1=1.30e61  (exploded)
+lr=0.300: epoch0=1.77e21 epoch1=1.40e21  (exploded)
+```
+
+Eight learning rates across two orders of magnitude, and not one produces
+healthy training: `0.01` is too small to make real progress, and
+everything from `0.015` up explodes (the explosions aren't even
+monotonically worse with larger `lr` — `0.02` is merely bad while `0.1` is
+astronomically worse, a chaotic, not smooth, relationship) — there is no
+clean stable middle found in this sweep. Didn't search further; the result
+itself is the finding, not an obstacle to route around. Plain momentum-SGD
+with one global learning rate is extremely fragile on a 1000-unit-wide
+ReLU network at this small (`weight_std=0.01`) initialization scale, in
+exactly the way the paper's own motivation describes without this repo
+needing to construct a special case to demonstrate it:
+
+> "SGD proved itself as an efficient and effective optimization method...
+> [but] Adam... has little memory requirements, is invariant to diagonal
+> rescaling of the gradients... The hyper-parameters have intuitive
+> interpretations and typically require little tuning."
+
+`lr=0.01` (the least-bad option found) is what's in the committed
+`figures/fig2b_optimizer_comparison.png` and `logs/run_momentum.log` — a
+genuinely weak showing for the paper's own comparison baseline, left as
+found rather than hand-tuned into looking more competitive, with this
+entry as the explanation for why.
+
+**Bias correction made training SLOWER here, not more stable — the
+opposite of what Section 6.4 claims.** First 3-epoch ablation run:
+
+```
+with_bc:    0.2637 -> 0.0907 -> 0.0598
+without_bc: 0.1937 -> 0.0658 -> 0.0389
+```
+
+Without correction is ahead at every epoch, not behind. Extended to 8
+epochs (`EPOCHS_ABLATION` bumped from 3 to 8) to check whether the
+without-correction run eventually destabilizes, since the paper's own
+claim is specifically about instability "especially apparent towards the
+end of optimization":
+
+```
+epoch: 0       1       2       3       4       5       6       7
+with:  0.2637  0.0907  0.0598  0.0437  0.0347  0.0259  0.0247  0.0211
+without:0.1937 0.0658  0.0389  0.0279  0.0210  0.0161  0.0162  0.0114
+```
+
+No crossover, no instability, across all 8 epochs — without-correction
+stays consistently, stably ahead. Tried the more extreme `beta2=0.9999`
+(the upper end of the paper's own sweep range in Fig. 4's caption,
+`beta2 in {0.99, 0.999, 0.9999}`) over 5 epochs to see if a more aggressive
+decay rate would trigger the claimed instability instead:
+
+```
+epoch: 0       1       2       3       4
+with:  0.2639  0.0909  0.0608  0.0433  0.0327
+without:0.2402 0.0909  0.0585  0.0421  0.0307
+```
+
+Still no instability, though the gap between the two conditions narrows
+(they're essentially tied at epoch 1). This is a genuine disagreement with
+the paper's Section 6.4 finding, on this specific task, honestly reported
+rather than massaged into alignment. A few plausible, non-exhaustive
+reasons this network/task might simply not be where the effect shows up:
+the paper's own demonstration is on a VAE (reconstruction loss, 50-d
+latent Gaussian, a very different loss landscape) trained up to 100
+epochs, not a discriminative classifier trained for 5-8; it's possible the
+instability needs either a longer horizon than tested here, or a loss
+surface shaped more like the paper's own generative-modeling setup, to
+actually manifest. What the math does explain, independent of any of
+that: the FIRST step without correction is provably larger than with it
+for this `beta1=0.9`/`beta2=0.999` pair (derivable directly from Algorithm
+1: at `t=1`, `m_hat/sqrt(v_hat) = sign(g)` exactly when corrected, vs.
+`(1-beta1)/sqrt(1-beta2) * sign(g) ≈ 3.16 * sign(g)` uncorrected) — so
+omitting correction isn't a free no-op here, it's a genuinely more
+aggressive optimizer on this task, and in this case "more aggressive" paid
+off rather than caused instability. Both are real, documented outcomes of
+the same mechanism; which one shows up depends on the loss landscape, and
+this repo's finding is simply a different point in that space than the
+paper's own.

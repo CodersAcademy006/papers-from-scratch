@@ -99,7 +99,11 @@ if __name__ == "__main__":
     print("wrote figures/fig2b_optimizer_comparison.png")
 
     print("\n=== bias-correction ablation, beta2=0.999 (Section 6.4) ===")
-    EPOCHS_ABLATION = 3
+    # Bumped from 3 to 8 after the first 3-epoch run came back disagreeing
+    # with the paper's claim (without-correction faster, not less stable)
+    # -- extended to see whether the trend reverses with more steps.
+    # It doesn't, over this run length; see JOURNAL.md entry 7.
+    EPOCHS_ABLATION = 8
     _, hist_with_bc = train("Adam-with-bias-correction",
                              lambda p: Adam(p, beta2=0.999, bias_correction=True),
                              X_train, D_train, EPOCHS_ABLATION, seed=2,
