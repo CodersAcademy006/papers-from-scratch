@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>papers-from-scratch</title>
+<style>
+  :root {
+    --bg: #0b0c0f;
+    --panel: #14161b;
+    --border: #262a33;
+    --text: #e8e9ec;
+    --muted: #8b8f99;
+    --accent: #7dd3a8;
+    --accent2: #e8c468;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+    line-height: 1.5;
+  }
+  header {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 20px 24px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    color: var(--muted);
+    max-width: 640px;
+    margin: 6px 0;
+  }
+  .stats {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    background: var(--panel);
+  }
+  .stat .n { font-size: 22px; color: var(--accent); font-weight: 600; }
+  .stat .label { font-size: 12px; color: var(--muted); }
+
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 0 20px 80px;
+  }
+  .category {
+    margin-top: 36px;
+  }
+  .category h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  .card {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: baseline;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    margin-bottom: 10px;
+    transition: border-color 0.15s;
+  }
+  .card.done { border-color: #2b4a3a; }
+  .card:hover { border-color: var(--accent); }
+  .num { color: var(--muted); font-size: 13px; }
+  .card.done .num { color: var(--accent); }
+  .title { font-size: 15px; }
+  .title a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--muted); }
+  .title a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .links { display: flex; gap: 10px; font-size: 12px; white-space: nowrap; }
+  .links a { color: var(--accent2); text-decoration: none; }
+  .links a:hover { text-decoration: underline; }
+  .badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .badge.done { color: var(--accent); border-color: #2b4a3a; }
+
+  footer {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 20px 20px 60px;
+    color: var(--muted);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent2); }
+</style>
+</head>
+<body>
+<header>
+  <h1>papers-from-scratch</h1>
+  <p>Hard research papers, implemented from scratch. No framework shortcuts — the actual mechanism (autograd, normalization, conv, attention, optimizer) is hand-rolled, not called from a library.</p>
+  <p>Every folder carries a <code>JOURNAL.md</code>: the paper's own quoted claims next to what actually happened implementing them — sourcing fights, transcription bugs, dead gradients, wrong hyperparameters, the fixes, and the final numbers against the paper's own.</p>
+  <div class="stats">
+    <div class="stat"><div class="n" id="stat-done">—</div><div class="label">implemented</div></div>
+    <div class="stat"><div class="n" id="stat-total">—</div><div class="label">queued</div></div>
+  </div>
+</header>
+<main id="main"></main>
+<footer>
+  Source: <a href="https://github.com/CodersAcademy006/papers-from-scratch">github.com/CodersAcademy006/papers-from-scratch</a>
+</footer>
+<script>
+// maintenance: this list mirrors README.md by hand. When a paper's checkbox
+// flips in the README, flip its `done` flag here too (no generator, it's one
+// boolean per paper, not worth a build step).
+const REPO = "CodersAcademy006/papers-from-scratch";
+const RAW = (path) => `https://github.com/${REPO}/blob/main/${path}`;
+const TREE = (path) => `https://github.com/${REPO}/tree/main/${path}`;
+
+const data = [
+  { cat: "A. Core autodiff & training infra", items: [
+    { n: "01", title: "Learning Representations by Back-Propagating Errors", meta: "Rumelhart, Hinton, Williams — Nature, 1986", dir: "01_backprop_autograd", done: true },
+    { n: "02", title: "Improving Neural Networks by Preventing Co-adaptation of Feature Detectors (Dropout)", meta: "Hinton, Srivastava, Krizhevsky, Sutskever, Salakhutdinov — arXiv:1207.0580, 2012", dir: "02_dropout", done: true },
+    { n: "03", title: "Batch Normalization", meta: "Ioffe & Szegedy — arXiv:1502.03167, 2015", dir: "03_batchnorm", done: false },
+    { n: "04", title: "Adam: A Method for Stochastic Optimization", meta: "Kingma & Ba — arXiv:1412.6980, 2014", dir: "04_adam", done: false },
+    { n: "05", title: "Layer Normalization", meta: "Ba, Kiros, Hinton — arXiv:1607.06450, 2016", dir: "05_layernorm", done: false },
+  ]},
+  { cat: "B. CNN / vision classics", items: [
+    { n: "06", title: "Gradient-Based Learning Applied to Document Recognition (LeNet-5)", meta: "LeCun, Bottou, Bengio, Haffner — Proc. IEEE, 1998", dir: "06_lenet5", done: false },
+    { n: "07", title: "ImageNet Classification with Deep Convolutional Neural Networks (AlexNet)", meta: "Krizhevsky, Sutskever, Hinton — NeurIPS, 2012", dir: "07_alexnet", done: false },
+    { n: "08", title: "VGGNet", meta: "Simonyan & Zisserman — arXiv:1409.1556, 2014", dir: "08_vggnet", done: false },
+    { n: "09", title: "ResNet", meta: "He et al — arXiv:1512.03385, 2015", dir: "09_resnet", done: false },
+    { n: "10", title: "U-Net", meta: "Ronneberger, Fischer, Brox — arXiv:1505.04597, 2015", dir: "10_unet", done: false },
+    { n: "11", title: "Vision Transformer (ViT)", meta: "Dosovitskiy et al — arXiv:2010.11929, 2020", dir: "11_vit", done: false },
+  ]},
+  { cat: "C. Detection", items: [
+    { n: "12", title: "YOLO", meta: "Redmon et al — arXiv:1506.02640, 2015", dir: "12_yolo", done: false },
+    { n: "13", title: "Faster R-CNN", meta: "Ren, He, Girshick, Sun — arXiv:1506.01497, 2015", dir: "13_faster_rcnn", done: false },
+  ]},
+  { cat: "D. RNN / sequence models", items: [
+    { n: "14", title: "Long Short-Term Memory", meta: "Hochreiter & Schmidhuber, 1997", dir: "14_lstm", done: false },
+    { n: "15", title: "GRU (RNN Encoder-Decoder)", meta: "Cho et al — arXiv:1406.1078, 2014", dir: "15_gru", done: false },
+    { n: "16", title: "Sequence to Sequence Learning", meta: "Sutskever, Vinyals, Le — arXiv:1409.3215, 2014", dir: "16_seq2seq", done: false },
+    { n: "17", title: "Neural Machine Translation by Jointly Learning to Align and Translate", meta: "Bahdanau, Cho, Bengio — arXiv:1409.0473, 2014", dir: "17_bahdanau_attention", done: false },
+  ]},
+  { cat: "E. Transformer / LLM core", items: [
+    { n: "18", title: "Attention Is All You Need", meta: "Vaswani et al — arXiv:1706.03762, 2017", dir: "18_transformer", done: false },
+    { n: "19", title: "BERT", meta: "Devlin et al — arXiv:1810.04805, 2018", dir: "19_bert", done: false },
+    { n: "20", title: "GPT-2", meta: "Radford et al — OpenAI, 2019", dir: "20_gpt2", done: false },
+    { n: "21", title: "GPT-3", meta: "Brown et al — arXiv:2005.14165, 2020", dir: "21_gpt3", done: false },
+    { n: "22", title: "LoRA", meta: "Hu et al — arXiv:2106.09685, 2021", dir: "22_lora", done: false },
+    { n: "23", title: "Sparsely-Gated Mixture-of-Experts", meta: "Shazeer et al — arXiv:1701.06538, 2017", dir: "23_moe_sparse", done: false },
+  ]},
+  { cat: "F. Tokenization / embeddings", items: [
+    { n: "24", title: "Word2Vec", meta: "Mikolov et al — arXiv:1301.3781, 2013", dir: "24_word2vec", done: false },
+    { n: "25", title: "BPE Tokenizer", meta: "Sennrich, Haddow, Birch — arXiv:1508.07909, 2015", dir: "25_bpe_tokenizer", done: false },
+  ]},
+  { cat: "G. Generative models", items: [
+    { n: "26", title: "Generative Adversarial Networks", meta: "Goodfellow et al — arXiv:1406.2661, 2014", dir: "26_gan", done: false },
+    { n: "27", title: "DCGAN", meta: "Radford, Metz, Chintala — arXiv:1511.06434, 2015", dir: "27_dcgan", done: false },
+    { n: "28", title: "Auto-Encoding Variational Bayes (VAE)", meta: "Kingma & Welling — arXiv:1312.6114, 2013", dir: "28_vae", done: false },
+    { n: "29", title: "StyleGAN", meta: "Karras, Laine, Aila — arXiv:1812.04948, 2018", dir: "29_stylegan", done: false },
+    { n: "30", title: "Denoising Diffusion Probabilistic Models", meta: "Ho, Jain, Abbeel — arXiv:2006.11239, 2020", dir: "30_ddpm", done: false },
+    { n: "31", title: "Denoising Diffusion Implicit Models", meta: "Song, Meng, Ermon — arXiv:2010.02502, 2020", dir: "31_ddim", done: false },
+    { n: "32", title: "Latent Diffusion (Stable Diffusion)", meta: "Rombach et al — arXiv:2112.10752, 2021", dir: "32_latent_diffusion", done: false },
+    { n: "33", title: "A Neural Algorithm of Artistic Style", meta: "Gatys, Ecker, Bethge — arXiv:1508.06576, 2015", dir: "33_neural_style_transfer", done: false },
+  ]},
+  { cat: "H. Reinforcement learning", items: [
+    { n: "34", title: "Playing Atari with Deep Reinforcement Learning (DQN)", meta: "Mnih et al — arXiv:1312.5602, 2013", dir: "34_dqn", done: false },
+    { n: "35", title: "Asynchronous Methods for Deep RL (A3C)", meta: "Mnih et al — arXiv:1602.01783, 2016", dir: "35_a3c", done: false },
+    { n: "36", title: "Proximal Policy Optimization", meta: "Schulman et al — arXiv:1707.06347, 2017", dir: "36_ppo", done: false },
+    { n: "37", title: "AlphaZero", meta: "Silver et al — arXiv:1712.01815, 2017", dir: "37_alphazero", done: false },
+    { n: "38", title: "Double DQN", meta: "van Hasselt, Guez, Silver — arXiv:1509.06461, 2015", dir: "38_double_dqn", done: false },
+    { n: "39", title: "Generalized Advantage Estimation", meta: "Schulman et al — arXiv:1506.02438, 2015", dir: "39_gae", done: false },
+  ]},
+  { cat: "I. Memory / graph / structured", items: [
+    { n: "40", title: "Neural Turing Machines", meta: "Graves, Wayne, Danihelka — arXiv:1410.5401, 2014", dir: "40_neural_turing_machine", done: false },
+    { n: "41", title: "Pointer Networks", meta: "Vinyals, Fortunato, Jaitly — arXiv:1506.03134, 2015", dir: "41_pointer_networks", done: false },
+    { n: "42", title: "Graph Convolutional Networks", meta: "Kipf & Welling — arXiv:1609.02907, 2016", dir: "42_gcn", done: false },
+    { n: "43", title: "Graph Attention Networks", meta: "Veličković et al — arXiv:1710.10903, 2017", dir: "43_gat", done: false },
+    { n: "44", title: "Neural Ordinary Differential Equations", meta: "Chen et al — arXiv:1806.07366, 2018", dir: "44_neural_ode", done: false },
+  ]},
+  { cat: "J. Multimodal / speech / representation learning", items: [
+    { n: "45", title: "CLIP", meta: "Radford et al — arXiv:2103.00020, 2021", dir: "45_clip", done: false },
+    { n: "46", title: "WaveNet", meta: "van den Oord et al — arXiv:1609.03499, 2016", dir: "46_wavenet", done: false },
+    { n: "47", title: "Tacotron 2", meta: "Shen et al — arXiv:1712.05884, 2017", dir: "47_tacotron2", done: false },
+    { n: "48", title: "wav2vec 2.0", meta: "Baevski et al — arXiv:2006.11477, 2020", dir: "48_wav2vec2", done: false },
+    { n: "49", title: "SimCLR", meta: "Chen et al — arXiv:2002.05709, 2020", dir: "49_simclr", done: false },
+    { n: "50", title: "Masked Autoencoders (MAE)", meta: "He et al — arXiv:2111.06377, 2021", dir: "50_mae", done: false },
+  ]},
+];
+
+const main = document.getElementById("main");
+let done = 0, total = 0;
+for (const section of data) {
+  const sec = document.createElement("div");
+  sec.className = "category";
+  const h2 = document.createElement("h2");
+  h2.textContent = section.cat;
+  sec.appendChild(h2);
+  for (const item of section.items) {
+    total++;
+    if (item.done) done++;
+    const card = document.createElement("div");
+    card.className = "card" + (item.done ? " done" : "");
+    const links = item.done
+      ? `<a href="${TREE(item.dir)}">folder</a><a href="${RAW(item.dir + "/JOURNAL.md")}">journal</a>`
+      : `<span class="badge">queued</span>`;
+    card.innerHTML = `
+      <div class="num">${item.n}</div>
+      <div>
+        <div class="title"><a href="${item.done ? TREE(item.dir) : "#"}">${item.title}</a></div>
+        <div class="meta">${item.meta}</div>
+      </div>
+      <div class="links">${item.done ? `<span class="badge done">done</span>${links}` : links}</div>
+    `;
+    sec.appendChild(card);
+  }
+  main.appendChild(sec);
+}
+document.getElementById("stat-done").textContent = done;
+document.getElementById("stat-total").textContent = total;
+</script>
+</body>
+</html>
