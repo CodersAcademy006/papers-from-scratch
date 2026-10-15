@@ -148,3 +148,75 @@ single-layer checks in test_gradcheck.py didn't need this -- only the
 long composed chain did). At that step size all 16 parameter groups
 pass cleanly, worst relative error 3.35e-04, well under REL_TOL=1e-3 --
 confirmed stable across repeated runs.
+
+## Entry 5: Timing and a second scope cut
+
+Smoke-tested one real batch of 128 on the full network before launching
+anything: forward 7.4s, backward 22.6s, ~30.3s/batch total. At 390
+batches/epoch (50000 examples / 128) that's ~196 minutes/epoch -- 8
+epochs would be over a day, infeasible.
+
+Tried the paper's own batch size (256, Section 3.1) to see if it helps:
+58.97s/batch, 195 batches/epoch, ~192 minutes/epoch -- essentially the
+same total compute per epoch as batch=128 (58.97/30.25 ~ 1.95x the
+per-batch cost for 2x the examples). Confirms this is compute-bound on
+the conv layers, not batch-size-bound -- changing batch size just moves
+work between batches, it doesn't reduce total work.
+
+The only real lever left is data volume. Following the same scope cut
+05_layernorm's JOURNAL.md already used for an analogous reason (its
+Section 6.6 reproduction), subsampled the training set to 5000 examples
+(full 10000-example test set still used for honest evaluation). At
+batch=256 that's 19-20 batches/epoch.
+
+Real measured time for this subsampled epoch, at the paper's own
+lr=1e-2: 1179.5s for 20 batches (~59s/batch, matching the earlier
+single-batch estimate) -- but it never finished cleanly: loss went NaN
+partway through (see entry 6). At ~59s/batch, 20 batches/epoch is
+~19.7 minutes/epoch; 8 epochs lands at ~2.6 hours, in the same range as
+07_alexnet's actual training run.
+
+## Entry 6: A second real bug -- gradient explosion at the paper's own lr
+
+The 20-batch timing probe above didn't just run slowly, it diverged:
+`RuntimeWarning: invalid value encountered in multiply` from
+dropout.py, and the final printed loss was `nan`. Traced it with a
+batch-by-batch magnitude dump (logit_absmax, grad_absmax, w_absmax) at
+the paper's lr=1e-2:
+
+```
+batch 0: logit_absmax=3.18e+02  grad_absmax=3.05e+01  w_absmax=1.05e+00
+batch 1: logit_absmax=2.92e+04  grad_absmax=1.02e+03  w_absmax=1.01e+01
+batch 2: logit_absmax=9.63e+11  grad_absmax=8.74e+09  w_absmax=8.74e+07
+batch 3: logit_absmax=6.27e+73  grad_absmax=1.18e+67  w_absmax=1.18e+65
+batch 4: nan
+```
+
+Textbook exponential gradient explosion, roughly 100-1000x growth per
+batch, overflowing to NaN by batch 4. Not staged -- this surfaced from
+running the actual probe meant to measure timing, the divergence was
+unplanned.
+
+Section 3.1's lr=1e-2 was tuned for the paper's own setup: the original
+flat std=0.01 init (deliberately small-signal, as 07_alexnet's entry 6
+found), ImageNet-scale batch statistics, and the paper's own gradual
+LR-drop schedule over 74 epochs. This repo already substituted He init
+for config A (entry 2/3) specifically because the flat-std init doesn't
+transfer to this rescale -- but He init also changes what learning rate
+is safe, since it starts with proportionally larger per-layer gradients
+by design. Using the paper's lr unchanged after swapping the init was
+the mismatch.
+
+Tested lr=1e-3 (10x smaller) with the same batch-by-batch trace over 10
+batches: stable and improving the whole way, no explosion --
+
+```
+batch 0: loss=23.62  logit_absmax=3.18e+02  grad_absmax=3.05e+01
+batch 9: loss=3.03   logit_absmax=6.70e+00  grad_absmax=3.79e-01
+```
+
+Switched `run_experiment.py` to lr=1e-3. This is an explicitly-flagged
+hyperparameter substitution (same spirit as 06_lenet5's RBF->softmax
+and optimizer swaps, and 07_alexnet's init fix): the paper's own
+lr=1e-2 is tied to its own init scheme, and doesn't carry over once the
+init is changed for a different reason.
