@@ -22,13 +22,23 @@ class BatchNorm1d:
         self.running_var = np.zeros(n_features)
         self.n_batches_seen = 0
 
-    def forward_train(self, x):
+    def _batch_normalize(self, x):
+        """The pure Algorithm 1 math, no side effects. Shared by
+        forward_train (which also updates running stats, below) and
+        forward_probe (which doesn't -- see its docstring for why that
+        distinction matters)."""
         m = x.shape[0]
         mu_B = x.mean(axis=0)
         sigma_B_sq = x.var(axis=0)  # biased, i.e. divide by m, matching Algorithm 1
         std_inv = 1.0 / np.sqrt(sigma_B_sq + self.eps)
         x_hat = (x - mu_B) * std_inv
         y = self.gamma * x_hat + self.beta
+        cache = (x, x_hat, mu_B, sigma_B_sq, std_inv, m)
+        return y, cache
+
+    def forward_train(self, x):
+        y, cache = self._batch_normalize(x)
+        _, _, mu_B, sigma_B_sq, _, m = cache
 
         # unbiased variance estimate for the running average, per Algorithm 2:
         # "Var[x] = m/(m-1) * E_B[sigma_B^2]"
@@ -38,8 +48,19 @@ class BatchNorm1d:
         self.running_var = (self.running_var * n + unbiased_var) / (n + 1)
         self.n_batches_seen += 1
 
-        cache = (x, x_hat, mu_B, sigma_B_sq, std_inv, m)
         return y, cache
+
+    def forward_probe(self, x):
+        """Same batch-normalizing math as forward_train, but does NOT touch
+        running_mean/running_var/n_batches_seen. Exists for instrumentation:
+        run_experiment.py samples a fixed snapshot of examples periodically
+        to chart how an activation's distribution evolves (reproducing
+        Fig. 1b/c). If that used forward_train, every snapshot probe would
+        silently feed into the inference-time running average alongside the
+        real training mini-batches -- corrupting forward_eval for a reason
+        that has nothing to do with training."""
+        y, _ = self._batch_normalize(x)
+        return y
 
     def forward_eval(self, x):
         x_hat = (x - self.running_mean) / np.sqrt(self.running_var + self.eps)

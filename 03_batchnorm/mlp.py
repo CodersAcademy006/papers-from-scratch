@@ -120,3 +120,22 @@ class BNMLP:
 
     def loss(self, y_pred, D, eps=1e-12):
         return -np.sum(D * np.log(np.clip(y_pred, eps, 1.0)))
+
+    def probe_last_hidden_sigmoid_input(self, x):
+        """Fig. 1(b,c) reproduction: 'the evolution of input distributions to
+        a typical sigmoid'. Runs x through every layer up to (not including)
+        the output layer and returns the value actually fed into the LAST
+        hidden sigmoid -- y_bn if this network uses BN, raw z=Wu+b
+        otherwise. Uses bn.forward_probe so calling this during training
+        does not disturb the running stats used by forward_eval."""
+        a = x
+        last_l = self.n_layers - 2  # index of the last hidden layer (n_layers-1 is the output layer)
+        for l in range(last_l + 1):
+            z = a @ self.W[l].T
+            if self.bn[l] is not None:
+                sigmoid_input = self.bn[l].forward_probe(z)
+            else:
+                sigmoid_input = z + self.b[l]
+            if l < last_l:
+                a = sigmoid(sigmoid_input)
+        return sigmoid_input
