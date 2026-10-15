@@ -50,6 +50,17 @@ class LeNet5:
         self.F6 = Dense(120, 84, seed=next(rng_seed))
         self.out = Dense(84, 10, seed=next(rng_seed), activation=False)
 
+    def params(self):
+        return {
+            'C1.W': self.C1.W, 'C1.b': self.C1.b,
+            'S2.coeff': self.S2.coeff, 'S2.bias': self.S2.bias,
+            'C3.W': self.C3.W, 'C3.b': self.C3.b,
+            'S4.coeff': self.S4.coeff, 'S4.bias': self.S4.bias,
+            'C5.W': self.C5.W, 'C5.b': self.C5.b,
+            'F6.W': self.F6.W, 'F6.b': self.F6.b,
+            'out.W': self.out.W, 'out.b': self.out.b,
+        }
+
     def forward(self, x):
         self._c1_pre = self.C1.forward(x)
         self.h1 = squash(self._c1_pre)
