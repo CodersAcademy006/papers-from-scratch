@@ -217,3 +217,38 @@ it's categorically a different function, which is exactly what the paper's
 own cautionary paragraph in Section 2 implies: half-differentiating through
 a normalization step doesn't produce an approximately-correct gradient, it
 produces one that actively fights the optimization.
+
+## Entry 5 — Wiring BN into a full network, and the one simplification worth noting
+
+`mlp.py` composes `BatchNorm1d` with dense layers into the 784-100-100-100-10
+network from entry 3. One structural decision: the output layer never gets
+BN (the paper's figures and MNIST description only ever mention BN on the
+hidden sigmoid layers; the softmax+cross-entropy output is untouched, same
+convention as 02_dropout not dropping-out the output layer).
+
+First draft of `forward_train` had redundant, confusing branching — it
+computed `a = y_bn if is_output else sigmoid(y_bn)` inside the `if
+self.bn[l] is not None` branch, which can never actually trigger for the
+output layer since `__init__` never attaches a `BatchNorm1d` to it. Dead
+code that *looked* like a real branch. Cleaned it up before running
+anything, since leaving confusing-but-technically-harmless code in just
+because it happens to execute correctly isn't the same as it being right.
+
+`test_mlp_gradcheck.py` (composing the already-verified `BatchNorm1d`
+backward with the dense-layer backward, checking the composition itself,
+not just each piece in isolation) passed on the first real attempt for
+both `use_bn=False` and `use_bn=True`:
+
+```
+use_bn=False: 15 W entries checked, worst relative error = 3.30e-05
+use_bn=True: 15 W entries checked, worst relative error = 1.25e-06
+```
+
+No debugging saga here, unlike 02_dropout's three-bug training run — the
+isolated BN gradcheck in entry 4 already forced out the one subtle bug this
+mechanism has (the batch-statistics dependency), so by the time it's wired
+into a full network there wasn't a second hidden mistake waiting. Worth
+recording as a data point either way: not every paper in this repo produces
+a debugging saga, and that's fine — the discipline (write it, gradcheck it
+before trusting any training curve) is what matters, not whether something
+breaks.
