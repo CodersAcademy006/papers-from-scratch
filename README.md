@@ -2,7 +2,9 @@
 
 Hard research papers, implemented from scratch. No framework shortcuts — build the actual mechanism (autograd, attention, tokenizer, optimizer, etc.), not a wrapper around an existing library. This list is not capped; more papers get added over time.
 
-**Browse: [codersacademy006.github.io/papers-from-scratch](https://codersacademy006.github.io/papers-from-scratch/)** — clickable index into every journal, one paper at a time.
+**Browse: [papers-from-scratch.vercel.app](https://papers-from-scratch.vercel.app)** (also mirrored at [codersacademy006.github.io/papers-from-scratch](https://codersacademy006.github.io/papers-from-scratch/)) — clickable index into every journal, one paper at a time.
+
+To redeploy after editing `docs/index.html`: `cd docs && vercel deploy --prod --yes`. Project is already linked (`codersacademy006s-projects/papers-from-scratch`), so this is the only command needed — no new setup.
 
 Implemented so far: 5
 
