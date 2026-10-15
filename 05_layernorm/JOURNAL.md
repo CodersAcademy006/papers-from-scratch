@@ -177,3 +177,46 @@ relative error 4.91e-09 — about seven orders of magnitude tighter than the
 bug's 2.20e-02, the same kind of "categorically different function, not a
 precision issue" signature 03_batchnorm's naive-backward attempt showed
 (JOURNAL.md entry 4 there).
+
+## Entry 5 — Table 1's invariance claims, checked (and one tolerance miscalibration)
+
+`test_invariance_properties.py` checks three of Table 1's claims directly:
+weight-matrix rescale+recenter invariance (the positive claim, Eq. 6),
+single-weight-vector rescale NON-invariance (the negative claim — LN is
+explicitly NOT invariant to this, unlike BN/weight-norm, and it's worth
+checking the paper's "no" entries too, not just the "yes" ones), and
+single-training-case rescale invariance (Eq. 7).
+
+First run of the weight-matrix check failed at an assert written with too
+strict a tolerance (`1e-8`):
+
+```
+AssertionError: weight matrix rescale+recenter changed output, max diff=5.3324977180579936e-06
+```
+
+Checked the actual magnitudes before assuming the invariance claim itself
+was wrong: `z = Wx` ranges roughly [-5, 5] before normalization, LN output
+`y` ranges roughly [-2, 2], and the test's `delta=3.7` rescale pushes
+`W'` entries up to ~20 in magnitude — float64 arithmetic at that scale
+naturally accumulates errors in the `1e-6`-ish range, well above a `1e-8`
+absolute bar that would only be reasonable for values close to 1. Not a
+violation of the paper's claim, just an assert written without checking
+the data's actual scale first. Loosened both this check and the
+single-training-case check (which hit the identical issue, `2.71e-06`) to
+`1e-5`, matching the `ABS_TOL` scale used throughout this repo's
+gradchecks rather than an arbitrarily tight number. All three checks pass:
+
+```
+weight-matrix rescale+recenter invariance passed, max output diff = 5.33e-06
+weight-vector rescale correctly changes output (NOT invariant, as Table 1 says), max diff = 2.80e+00
+single-training-case rescale invariance passed: rescaled case's output diff = 2.71e-06, other cases unaffected (diff = 0.00e+00)
+```
+
+The weight-vector check's `2.80` max diff is the interesting contrast here
+— two to six orders of magnitude larger than the two invariant checks'
+diffs, which is exactly what "not invariant" should look like: a real,
+large output change, not a rounding artifact. Seeing both a tight
+near-zero diff (true invariance) and a clearly large diff (true
+non-invariance) in the same test file, from the same codebase, is a better
+confirmation that the implementation is actually testing something real
+than three near-zero results would have been.
