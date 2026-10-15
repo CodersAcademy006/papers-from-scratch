@@ -19,7 +19,9 @@ from bn_layer import BatchNorm1d
 
 
 def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-x))
+    # clip to avoid np.exp overflow at large |x| -- asymptotic value (0 or 1)
+    # is correct either way, this just silences the RuntimeWarning
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
 
 
 def softmax(x):

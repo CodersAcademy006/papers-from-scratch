@@ -252,3 +252,53 @@ recording as a data point either way: not every paper in this repo produces
 a debugging saga, and that's fine — the discipline (write it, gradcheck it
 before trusting any training curve) is what matters, not whether something
 breaks.
+
+## Entry 6 — Picking a learning rate the paper doesn't give, and a result that wasn't a bug
+
+Entry 3 already flagged that Section 4.1 never states a learning rate for
+the toy MNIST network (only for the unrelated, much bigger Inception
+experiment in 4.2). Swept `lr in {0.01, 0.05, 0.1, 0.3, 1.0}` at a cheap
+2000 steps before committing to the full 50000-step run, same discipline as
+02_dropout's `epsilon_0` sweep:
+
+```
+lr= 0.01  nobn_final_acc=0.3766   bn_final_acc=0.8755
+lr= 0.05  nobn_final_acc=0.3327   bn_final_acc=0.8501
+lr= 0.10  nobn_final_acc=0.0980   bn_final_acc=0.8338
+lr= 0.30  nobn_final_acc=0.0980   bn_final_acc=0.8637
+lr= 1.00  nobn_final_acc=0.0980   bn_final_acc=0.1009
+```
+
+First reaction to the `0.0980` values at `lr>=0.1` was to suspect the same
+kind of dead-sigmoid bug found in 02_dropout's debugging saga. It isn't:
+`0.0980` is a degenerate constant-class prediction (same signature as every
+other collapse seen in this repo so far), and it is happening to the
+**no-BN** network specifically, at learning rates the **BN** network
+tolerates just fine, reaching 83-86% in the same 2000 steps. That is not a
+bug to fix — it is Section 3.3's claim, reproduced directly and
+unprompted by a routine hyperparameter sweep:
+
+> "Batch Normalization also makes training more resilient to the parameter
+> scale... with Batch Normalization, back-propagation through a layer is
+> unaffected by the scale of its parameters... Batch Normalization allows
+> us to use much higher learning rates without the risk of divergence."
+
+Rather than treating this as noise to route around by picking whichever LR
+makes both networks look nice, it's used deliberately as two separate
+experiments with two different jobs:
+- **Main comparison, lr=0.01**: the only LR in the sweep where *both*
+  networks actually train (don't collapse), which is the fair,
+  apples-to-apples setting for Fig. 1(a) — same architecture, same LR,
+  isolate BN as the only difference.
+- **Stress test, lr=0.3** (Entry 3's extra ablation, beyond what the paper's
+  MNIST section shows): chosen specifically *because* it's where no-BN
+  collapses to chance (0.098) while BN still reaches 0.8637 in the sweep —
+  the cleanest few-thousand-step demonstration available of the exact
+  claim quoted above, not the smallest LR that happens to avoid collapse.
+
+Also fixed a `RuntimeWarning: overflow encountered in exp` from `sigmoid()`
+hit during the sweep at the higher LRs (large pre-activations send
+`np.exp(-x)` to overflow) — clipped the input to `[-500, 500]` before the
+exponential. The asymptotic sigmoid value (0 or 1) is correct either way;
+this only silences the warning, it does not change any result, confirmed
+by re-running both gradchecks afterward (unchanged: 3.30e-05 / 1.25e-06).
