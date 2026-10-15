@@ -21,7 +21,7 @@ FIG_DIR = os.path.join(HERE, "figures")
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(FIG_DIR, exist_ok=True)
 
-EPOCHS = 30
+EPOCHS = 8
 BATCH_SIZE = 128
 PATIENCE = 3
 LR_DECAY_FACTOR = 10.0
