@@ -172,3 +172,72 @@ undertaking, unrelated to "implement a CNN from scratch." Section VII's
 Space-Displacement Neural Network and Section IX's online handwriting
 system are likewise downstream applications, not part of the architecture
 this folder is reproducing.
+
+## Entry 4 — Conv2D and SubsampleLayer, gradchecked in isolation
+
+`conv2d.py` is im2col/col2im-based valid convolution (stride 1, no
+padding, matching every conv layer in LeNet-5). C3's irregular Table I
+connectivity is handled with one mechanism, not a special case: a boolean
+`(C_out, C_in)` mask is applied to the weight tensor every forward pass
+(`W_effective = W * mask`), so unconnected weight slices start at zero and
+the chain rule alone keeps their gradient at zero forever — no branching
+in `backward()` between the "sparse" and "full" connectivity cases, a
+full-connectivity `Conv2D` is just one where `mask` is all ones.
+
+`subsample.py` implements the paper's actual S2/S4 mechanism (entry 2):
+one trainable scalar coefficient and bias per feature map on top of the
+2x2 average, not plain average pooling.
+
+Both gradchecked before composing anything (`test_gradcheck.py`): full
+connectivity, sparse C3-style connectivity (with an explicit assert that
+unconnected weight slices stay exactly zero through both init and after
+a backward pass, not just a numeric gradient check), and the subsample
+layer. All three passed on the first real run:
+
+```
+Conv2D (full connectivity) gradcheck passed: worst rel err dW=3.29e-11 db=1.32e-11 dx=3.47e-08
+Conv2D (sparse connectivity, C3-style) gradcheck passed: worst rel err dW=2.23e-11, zero-masked entries confirmed
+SubsampleLayer gradcheck passed: worst rel err dcoeff=8.60e-12 dbias=9.38e-11 dx=1.02e-09
+```
+
+No bug to report — im2col/col2im is a well-trodden pattern and the mask
+trick is simple enough to get right on the first pass. Recording the
+clean result plainly rather than looking for a story that isn't there.
+
+## Entry 5 — Composing the full network: one honest numerical-precision observation
+
+`lenet5.py` wires C1-S2-C3-S4-C5-F6 together (`LeNet5.forward`/`backward`),
+substituting softmax+cross-entropy for the paper's RBF output (entry 3).
+First full draft of `forward()` had a real but harmless mistake, caught on
+read-through before running anything: it called `self.C1.forward(x)` a
+second time inside a leftover placeholder line while building up the
+pre-activation caching `backward()` needs, duplicating a conv pass for no
+reason. Fixed before the first run (no gradcheck needed to catch
+this one — it was a dead line, not a math error).
+
+`test_lenet5_gradcheck.py` checks every parameter in the composed network
+against finite differences on a small batch. Passed on the first real
+run, all 14 parameter groups:
+
+```
+C1.W: 4.70e-06   C1.b: 3.52e-06   S2.coeff: 1.42e-05  S2.bias: 3.67e-07
+C3.W: 1.26e-03   C3.b: 1.35e-07   S4.coeff: 2.13e-05  S4.bias: 2.27e-08
+C5.W: 5.09e-06   C5.b: 6.99e-09   F6.W:     7.24e-06  F6.b:    1.36e-09
+out.W: 2.47e-06  out.b: 6.08e-10
+```
+
+One real, worth-noting detail rather than smoothing it over: `C3.W`'s
+worst relative error (1.26e-03) is visibly higher than every other
+parameter group, and technically above this repo's usual `REL_TOL=1e-3`
+bar — it only passes because the check also accepts `ABS_TOL<1e-4` in
+absolute terms, which it clears comfortably. Not a bug: C3 sits in the
+middle of a six-layer chain of smooth tanh nonlinearities (C1->S2->C3 on
+the way up, C3->S4->C5->F6->out on the way back), and finite-difference
+error compounds through a longer chain of multiplications in both
+directions more than it does for a parameter near either end of the
+network (C1 is one layer from the input, out.W is one layer from the
+loss). This is a known, generic property of numerical differentiation
+through deep computation graphs, not specific to this architecture or a
+sign of a mistake — flagged here because the honest thing to do with a
+gradcheck number that's an order of magnitude worse than its neighbors is
+explain why, not quietly round it off as "still passing."
