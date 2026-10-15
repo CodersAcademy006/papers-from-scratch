@@ -12,12 +12,19 @@ import numpy as np
 
 
 class BatchNorm1d:
-    def __init__(self, n_features, eps=1e-5):
+    def __init__(self, n_features, eps=1e-5, momentum=0.9):
         self.eps = eps
+        self.momentum = momentum
         self.gamma = np.ones(n_features)
         self.beta = np.zeros(n_features)
-        # Entry 2: paper says "average over" multiple mini-batches for
-        # inference stats -- literal running (not exponential) average.
+        # Entry 7 (JOURNAL.md): this was a literal (arithmetic) running
+        # average in the first version, per the paper's vague "average
+        # over them" phrasing (quoted in entry 2) -- found empirically to
+        # badly hurt test-time accuracy (weighs noisy pre-convergence batch
+        # stats equally with the final ones), via a direct side-by-side
+        # diagnostic (attempts/investigate_inference_stats.py). Switched to
+        # an exponential moving average, the convention that became
+        # standard for exactly this reason.
         self.running_mean = np.zeros(n_features)
         self.running_var = np.zeros(n_features)
         self.n_batches_seen = 0
@@ -40,12 +47,19 @@ class BatchNorm1d:
         y, cache = self._batch_normalize(x)
         _, _, mu_B, sigma_B_sq, _, m = cache
 
-        # unbiased variance estimate for the running average, per Algorithm 2:
-        # "Var[x] = m/(m-1) * E_B[sigma_B^2]"
+        # unbiased variance estimate, per Algorithm 2: "Var[x] = m/(m-1) *
+        # E_B[sigma_B^2]"; folded into an EXPONENTIAL moving average rather
+        # than a plain one -- see entry 7, this is a corrected deviation
+        # from a literal-average first attempt that measurably hurt
+        # test-time accuracy.
         unbiased_var = sigma_B_sq * m / (m - 1) if m > 1 else sigma_B_sq
-        n = self.n_batches_seen
-        self.running_mean = (self.running_mean * n + mu_B) / (n + 1)
-        self.running_var = (self.running_var * n + unbiased_var) / (n + 1)
+        if self.n_batches_seen == 0:
+            self.running_mean = mu_B
+            self.running_var = unbiased_var
+        else:
+            mom = self.momentum
+            self.running_mean = mom * self.running_mean + (1 - mom) * mu_B
+            self.running_var = mom * self.running_var + (1 - mom) * unbiased_var
         self.n_batches_seen += 1
 
         return y, cache

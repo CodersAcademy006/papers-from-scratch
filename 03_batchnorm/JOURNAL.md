@@ -302,3 +302,85 @@ hit during the sweep at the higher LRs (large pre-activations send
 exponential. The asymptotic sigmoid value (0 or 1) is correct either way;
 this only silences the warning, it does not change any result, confirmed
 by re-running both gradchecks afterward (unchanged: 3.30e-05 / 1.25e-06).
+
+## Entry 7 — The main comparison came back backwards, and why
+
+First full 50000-step run of the main comparison (lr=0.01, the "fair,
+same-LR" setting from entry 6) did NOT reproduce Fig. 1(a)'s shape:
+
+```
+FINAL test accuracy: no-BN=0.9662 BN=0.9651
+```
+
+Not just close — **no-BN was converging faster** through most of training
+(step 10000: no-BN 0.9422 vs. BN 0.8951; step 20000: no-BN 0.9590 vs. BN
+0.9486), and BN's curve was visibly noisier late in training (oscillating
+0.93-0.96 rather than settling). This is the opposite of what the paper
+claims for this exact experiment, and it would have been easy to just
+report "results were mixed, BN didn't clearly help here" and move on
+(especially since the LR stress test in entry 6 had already independently
+confirmed Section 3.3's claim) — but a literal reversal of the paper's own
+central example is worth actually chasing down before writing it off as
+noise or an inherent limitation.
+
+Prime suspect: entry 2's deliberate choice to implement inference
+statistics as a **literal running (arithmetic) average** across every
+training mini-batch ever seen, rather than the exponential moving average
+that later became standard. A plain average weighs the very first, noisiest
+mini-batches (computed when the network is still near its random
+initialization) exactly as heavily as the 50000th. If the network's
+activation distribution shifts substantially over training — which,
+notably, is *itself* internal covariate shift, the exact phenomenon this
+paper is about — a plain running average's final value could end up a
+blend of "where the network starts" and "where it ends," systematically
+wrong for `forward_eval()` even though the batch-statistics-based training
+path (`forward_train()`) was never affected at all. That asymmetry (train
+path fine, inference path biased) matches the symptom: BN's degraded
+curve only shows up in *test* accuracy, which is the one thing that goes
+through `forward_eval()`.
+
+Tested directly rather than assumed: `attempts/investigate_inference_stats.py`
+retrains the BN network at the same lr=0.01 with a throwaway
+`EMABatchNorm1d` subclass (exponential moving average, momentum 0.9)
+standing in for the real class, leaving the then-current plain-average
+`BatchNorm1d` untouched until there was a result to justify changing it:
+
+```
+[BN-EMA] step   5000 test_acc=0.9588   (plain average: 0.8515 at this point)
+[BN-EMA] step  10000 test_acc=0.9738   (plain average: 0.8951)
+FINAL BN-EMA test accuracy: 0.9757      (plain average: 0.9651, no-BN: 0.9662)
+```
+
+Confirmed. Switched `bn_layer.py`'s `BatchNorm1d` to use the exponential
+moving average directly (momentum 0.9) as the real implementation, not
+just a diagnostic side-branch — re-ran both gradchecks afterward to
+confirm the change (pure bookkeeping, doesn't touch `forward_train`'s
+returned value or `backward()`) didn't disturb anything already verified:
+unchanged, 1.30e-09 and 3.30e-05/1.25e-06. Re-ran the full experiment with
+the fix in place; final numbers now match the paper's claimed shape
+cleanly:
+
+```
+FINAL test accuracy: no-BN=0.9662 BN=0.9757          (lr=0.01, main comparison)
+no-BN @ lr=0.3: 0.1032 (chance)   BN @ lr=0.3: 0.9698  (stress test, entry 6)
+```
+
+BN now visibly trains faster (step 5000: 0.9588 vs. no-BN's 0.8420; step
+10000: 0.9738 vs. 0.9422) in addition to reaching higher final accuracy —
+the actual shape of Fig. 1(a), not just a win on the final number. The
+figures committed in this repo (`figures/fig1a_test_accuracy.png`,
+`figures/fig1bc_activation_percentiles.png`, `figures/lr_stress_test.png`)
+are from this corrected run. `attempts/investigate_inference_stats.py`
+is kept as the evidence trail for why the default changed, not as a live
+alternative — it's redundant with `bn_layer.py` now that the real class
+implements the same logic directly.
+
+One honest caveat: the paper never actually specifies HOW to average
+inference statistics across batches beyond "average over them" (quoted in
+entry 2) — EMA being the right choice here is an empirical finding about
+*this* experiment's dynamics (a network whose activation statistics shift
+a lot early in training, trained for a fixed, fairly large number of
+steps), not a proof that EMA is universally correct or that the paper
+"meant" EMA all along. It's presented here as the corrected, better-
+performing choice, backed by a direct side-by-side comparison — not as
+uncovering what the paper secretly intended.
