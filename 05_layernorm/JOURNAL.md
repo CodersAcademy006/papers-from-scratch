@@ -220,3 +220,55 @@ near-zero diff (true invariance) and a clearly large diff (true
 non-invariance) in the same test file, from the same codebase, is a better
 confirmation that the implementation is actually testing something real
 than three near-zero results would have been.
+
+## Entry 6 — A backward pass that looks wrong on a read-through, but isn't
+
+`mlp_norm.py`'s `NormMLP` covers all three conditions (`"none"`,
+`"batchnorm"`, `"layernorm"`) for Section 6.6's comparison in one class.
+Writing `backward()`, the ReLU-mask bookkeeping came out looking
+inconsistent between the two branches:
+
+- The no-norm branch applies the ReLU-derivative mask at the END of its
+  own iteration, using `activations[l] > 0` — pre-computing the mask the
+  NEXT (lower) layer will need.
+- The norm branch applies a mask at the START of its own iteration, using
+  `activations[l+1] > 0` — masking the gradient it just received for its
+  OWN ReLU, before handing an unmasked gradient further down.
+
+Traced a concrete 3-layer example by hand (2 hidden + 1 output, both
+hidden layers normed) before trusting this: the always-unnormed output
+layer's end-of-iteration masking step fires regardless of whether the
+layer below it is normed, which means the top hidden layer's norm branch
+receives an already-masked gradient and then masks it AGAIN with the
+identical `activations[...] > 0` array. On paper this looks like a
+double-application bug. It isn't one, for a reason specific to boolean
+masks: `mask * mask == mask` for any `mask in {0, 1}`, so re-applying the
+exact same positivity mask a second time is a no-op, not a second
+derivative multiplication. Every hidden-to-hidden transition in this
+architecture turns out to apply the correct mask exactly once in net
+effect, just with the "end of upper iteration" and "start of lower
+iteration" responsibilities overlapping for the layer adjacent to the
+(always unnormed) output layer.
+
+This reasoning could easily have been wrong — relying on "it's idempotent
+so it cancels out" is exactly the kind of manual proof that should be
+checked, not trusted. `test_mlp_gradcheck.py` is the actual arbiter:
+passed on the first real run for all three `norm_mode` values,
+
+```
+norm_mode=none: 10 W entries checked (20 skipped as kink-adjacent), worst relative error = 1.74e-09
+norm_mode=batchnorm: 10 W entries checked (20 skipped as kink-adjacent), worst relative error = 4.07e-09
+norm_mode=layernorm: 15 W entries checked (0 skipped as kink-adjacent), worst relative error = 3.33e-09
+```
+
+confirming the hand-trace rather than replacing it — both together are
+more convincing than either alone would have been. Worth noting
+`norm_mode=layernorm` needed 0 kink-adjacent units excluded, vs. 20 for
+the other two modes with the same `weight_std=0.3` and input scaling: LN's
+per-example normalization (mean 0, unit variance, by construction, every
+forward pass) keeps pre-activations spread away from exactly zero far more
+reliably than an unnormalized or even a batch-normalized signal does at
+this small test-batch size — a small, incidental illustration of entry 2's
+"layer normalization performs exactly the same computation" point showing
+up as a more consistently-scaled signal too, not just a training/inference
+convenience.
