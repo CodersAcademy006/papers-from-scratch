@@ -80,3 +80,13 @@ Implemented so far: 5
 - Each folder holds one paper's from-scratch implementation + a short note on what broke/what the paper glossed over.
 - No pulling in a library that already implements the thing you're building (e.g. no `torch.nn.MultiheadAttention` inside `18_transformer/`). Framework for tensors/autograd is fine; the mechanism itself is not.
 - Check a box in this README when a folder's implementation runs and the note is written.
+
+## Hardware
+
+Every script in this repo runs on CPU only, pure numpy, no GPU/MPS
+acceleration — there's no `.cuda()`/`.to(device)` anywhere to even flip.
+Dev machine: MacBook Air, Apple M5, 16GB RAM, macOS 26.4, numpy 2.1.0.
+Every wall-clock timing quoted in any `JOURNAL.md` (epoch durations,
+smoke-test timings, "X minutes for the full run") is specific to this
+machine, not a performance claim about the algorithm — different
+hardware will give different numbers for the same code.

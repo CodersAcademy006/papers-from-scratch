@@ -3,6 +3,8 @@
 Paper: "Batch Normalization: Accelerating Deep Network Training by Reducing
 Internal Covariate Shift" (Ioffe & Szegedy, arXiv:1502.03167, 2015).
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing
 
 On arXiv, full text pulled directly through `mcp__alphaxiv__get_paper_content`

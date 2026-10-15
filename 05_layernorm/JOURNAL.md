@@ -2,6 +2,8 @@
 
 Paper: "Layer Normalization" (Ba, Kiros, Hinton, arXiv:1607.06450, 2016).
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing
 
 Direct arXiv full-text pull, same as 03/04. 3 for 3 easy sourcing streak

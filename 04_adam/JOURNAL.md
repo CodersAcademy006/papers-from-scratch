@@ -3,6 +3,8 @@
 Paper: "Adam: A Method for Stochastic Optimization" (Kingma & Ba, ICLR 2015,
 arXiv:1412.6980).
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing
 
 Direct arXiv full-text pull again, same as 03_batchnorm, no mirror fight.

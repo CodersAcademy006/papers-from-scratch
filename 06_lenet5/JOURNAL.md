@@ -1,5 +1,7 @@
 # 06_lenet5 — Journal
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing
 
 Not on arXiv (1998, predates it). Paper: LeCun, Bottou, Bengio, Haffner,

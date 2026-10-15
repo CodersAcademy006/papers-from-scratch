@@ -2,6 +2,8 @@
 
 Hinton, Srivastava, Krizhevsky, Sutskever, Salakhutdinov. arXiv:1207.0580 (2012). This is the short, original dropout report, not the longer 2014 JMLR paper — the README links the 2012 one specifically.
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing
 
 On arXiv, so this one was easy: fetched directly via alphaxiv's `get_paper_content` with `fullText=true`, full 18-page text (including all appendices) in one call, no mirror hunting needed this time (contrast with paper 01's three-hop detour through a bot wall and a WebFetch PDF-decoding failure).

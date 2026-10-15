@@ -4,6 +4,8 @@ Rumelhart, D.E., Hinton, G.E. & Williams, R.J. *Nature* 323, 533-536 (1986). DOI
 
 This file is written as the work happens, not reconstructed afterward. Entries are appended in chronological order.
 
+Hardware: see repo README — CPU-only, pure numpy, no GPU. All timings below are specific to that machine.
+
 ## Entry 1 — Sourcing the paper
 
 The paper predates arXiv (1986, published in *Nature*), so it is not in alphaxiv's index. Had to find a free mirror.
