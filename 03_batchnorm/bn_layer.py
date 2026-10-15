@@ -4,9 +4,8 @@ backward derivation in Section 3 (quoted in full in JOURNAL.md entry 2).
 
 Backward is implemented term-by-term exactly as the paper writes it, not the
 algebraically-collapsed single-line form common in other from-scratch
-write-ups -- deliberately, so each line here maps to one quoted equation.
-This is the corrected version; see attempts/naive_batchnorm_backward.py and
-JOURNAL.md entry 4 for the broken first attempt and why it's wrong.
+write-ups -- deliberately, so each line here maps to one quoted equation
+(JOURNAL.md entry 2) and can be checked against the paper directly.
 """
 import numpy as np
 

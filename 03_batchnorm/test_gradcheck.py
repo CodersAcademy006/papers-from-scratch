@@ -2,9 +2,8 @@
 Numerical gradient check for BatchNorm1d.backward(), covering dx, dgamma,
 dbeta. The dx check is the interesting one: it only passes if backward()
 correctly accounts for x_i's influence on mu_B and sigma_B^2 (every x_i in
-the batch affects the batch statistics used to normalize every other x_i).
-attempts/check_naive_fails.py shows what happens if you don't -- worst
-relative error 1.37, i.e. completely wrong, not a rounding issue.
+the batch affects the batch statistics used to normalize every other x_i) --
+a dependency it is easy to miss when first writing this derivation out.
 """
 import numpy as np
 from bn_layer import BatchNorm1d
