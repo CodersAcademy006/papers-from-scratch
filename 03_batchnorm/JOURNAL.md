@@ -168,3 +168,52 @@ faster":
 Out of scope, same as every other paper here: the Inception/ImageNet
 experiment (13.6M-parameter conv net, distributed training, ensemble of 6
 networks) — a multi-day, multi-GPU undertaking, not attempted.
+
+## Entry 4 — Deliberately writing the wrong backward pass first, and proving it's wrong
+
+The paper's own Section 2 (quoted in entry 2) describes a real historical
+failure mode: differentiate through `x_hat = (x - mu_B) / sqrt(sigma_B^2 +
+eps)` as if `mu_B` and `sigma_B^2` were constants with respect to `x`,
+instead of functions of every `x_i` in the batch. That's the "obvious"
+derivative to write if you only glance at the forward formula.
+
+Wrote exactly that version first, on purpose: `attempts/naive_batchnorm_backward.py`.
+It gives `dx_i = dx_hat_i / sqrt(sigma_B^2 + eps)` — drops the `dL/dmu_B` and
+`dL/dsigma_B^2` terms from the paper's full chain-rule expansion entirely.
+
+Then checked it against a numerical gradient (`attempts/check_naive_fails.py`,
+kept as a standalone script rather than folded into the real test suite,
+since its only job is to produce this one piece of evidence):
+
+```
+$ python check_naive_fails.py
+naive backward: worst relative error over 32 entries = 1.3707
+```
+
+A relative error of 1.37 on an 8x4 random input isn't a numerical-precision
+issue (those show up as 1e-4 or smaller) — the naive gradient is simply the
+wrong function. This matches the paper's own warning almost exactly: the
+paper describes the forward-pass version of this mistake (treating `E[x]` as
+independent of `b` when it was computed over data that includes `b`'s
+effect) and says it causes the loss to stop decreasing while a parameter
+drifts unboundedly. The backward-pass version of the same mistake (this one)
+would show up as a model that trains, but on a quietly wrong gradient
+signal — arguably worse, since there's no "it blew up" moment to notice it.
+
+The fix (`bn_layer.py`) is the full five-line expansion from entry 2's
+quoted equations, implemented term by term rather than collapsed into one
+expression — specifically so each line maps to one quoted equation and can
+be checked against the paper directly. Re-ran the check against the correct
+version with a proper gradcheck covering `dx`, `dgamma`, `dbeta` together
+(`test_gradcheck.py`):
+
+```
+$ python test_gradcheck.py
+gradcheck passed, 50 entries (dx, dgamma, dbeta), worst relative error = 1.30e-09
+```
+
+1.30e-09 vs. 1.37 — not a close call. The naive version isn't "a bit off,"
+it's categorically a different function, which is exactly what the paper's
+own cautionary paragraph in Section 2 implies: half-differentiating through
+a normalization step doesn't produce an approximately-correct gradient, it
+produces one that actively fights the optimization.
