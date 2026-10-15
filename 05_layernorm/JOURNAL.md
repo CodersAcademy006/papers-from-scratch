@@ -146,3 +146,34 @@ ConvNet experiment is also skipped: the paper itself calls it
 make layer normalization work well in ConvNets"), so there's no clean
 claim to validate there even if a conv layer were available (it isn't yet
 either — that's 06_lenet5's job).
+
+## Entry 4 — A real bug in the axis-swap, caught by gradcheck on the first run
+
+`ln_layer.py` was written by taking 03_batchnorm's `BatchNorm1d.backward()`
+and substituting `(x - mu) = x_hat / std_inv` throughout (since this class
+doesn't cache `x` itself, only `x_hat` and `std_inv`, to keep the cache
+smaller). First `test_gradcheck.py` run failed immediately:
+
+```
+AssertionError: dx[0,0]: analytic=0.12066323 numeric=0.11800632 rel_err=2.20e-02
+```
+
+The substitution itself had an algebra error. The term needed is `(x - mu)
+* (sigma_sq + eps)^(-3/2)`. Since `std_inv = (sigma_sq + eps)^(-1/2)`:
+
+```
+(x - mu) * (sigma_sq + eps)^(-3/2)
+  = (x_hat / std_inv) * std_inv^3
+  = x_hat * std_inv^2
+```
+
+The first version wrote `x_hat * std_inv` (power 1, not 2) — missing one
+factor of `std_inv` entirely, not a rounding/precision issue. Fixed by
+using `std_inv ** 2` explicitly rather than re-deriving from scratch, with
+a comment showing the substitution so the next reader doesn't have to
+redo the algebra to see why the squared term is there. Re-ran: passed, 56
+entries (dx, dgamma, dbeta) across `(6, 7)`-shaped test data, worst
+relative error 4.91e-09 — about seven orders of magnitude tighter than the
+bug's 2.20e-02, the same kind of "categorically different function, not a
+precision issue" signature 03_batchnorm's naive-backward attempt showed
+(JOURNAL.md entry 4 there).
