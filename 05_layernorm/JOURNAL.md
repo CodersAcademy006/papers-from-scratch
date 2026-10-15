@@ -272,3 +272,65 @@ this small test-batch size — a small, incidental illustration of entry 2's
 "layer normalization performs exactly the same computation" point showing
 up as a more consistently-scaled signal too, not just a training/inference
 convenience.
+
+## Entry 7 — The Fig 6 reproduction: partly confirms the paper, partly doesn't
+
+`run_experiment.py` trains Baseline/BatchNorm/LayerNorm at batch size 128
+and batch size 4 (5000-example subset, 10 epochs, lr=0.01, same
+784-1000-1000-10 ReLU network as 03_batchnorm/04_adam). Final numbers:
+
+```
+                batch size 128              batch size 4
+            train_nll  test_err        train_nll  test_err
+Baseline     0.1647     0.0952          0.0047     0.0462
+BatchNorm    0.0129     0.0483          0.3726     0.0634
+LayerNorm    0.1704     0.0666          0.0252     0.0518
+```
+
+The paper's claim (entry 3): "layer normalization is robust to the
+batch-sizes and exhibits a faster training convergence comparing to batch
+normalization."
+
+**Confirmed: BatchNorm degrades badly at batch size 4.** Its train NLL is
+stuck above 0.37 after 10 epochs at bz=4, two orders of magnitude worse
+than its own bz=128 result (0.013) and worse than both other conditions
+at bz=4 — visible directly in the figure as the green bz=4 curve
+flattening out around epoch 3 while every other curve keeps dropping.
+Batch statistics computed from 4 examples are exactly as noisy as the
+mechanism's own derivation (entry 2) would predict.
+
+**Confirmed: LayerNorm is far more robust to batch size than BatchNorm.**
+LN's train NLL at bz=4 (0.0252) is close to its own bz=128 result order of
+magnitude, and LN clearly beats BN at bz=4 on both metrics (0.0252 vs
+0.3726 train NLL, 0.0518 vs 0.0634 test error) — this part of the claim
+reproduces cleanly.
+
+**Does not reproduce: "faster training convergence comparing to batch
+normalization," read as a general claim.** At batch size 128, BatchNorm
+is clearly faster and lower than LayerNorm on both metrics (0.0129 vs
+0.1704 train NLL, 0.0483 vs 0.0666 test error) — the opposite ordering.
+Re-reading the paper's own wording, this quote is almost certainly scoped
+to the small-batch regime the sentence is embedded in, not a claim that LN
+beats BN everywhere — but it's worth recording plainly that a literal,
+unscoped reading of "faster convergence comparing to batch normalization"
+is false in this run's batch-size-128 condition, and only true in the
+batch-size-4 condition.
+
+**An unplanned finding, not something the paper's quote addresses either
+way: plain Baseline (no normalization at all) matches or slightly beats
+LayerNorm at batch size 4** (test error 0.0462 vs 0.0518, train NLL 0.0047
+vs 0.0252) while being clearly the worst condition at batch size 128
+(test error 0.0952, worst of the three). Not claiming this contradicts
+the paper — Fig. 6 is about the BN-vs-LN comparison specifically, and this
+run's 5000-example subset and 10-epoch horizon are a much smaller
+reproduction than the paper's own setup — but it's a real, reported
+number from this run, not smoothed into a cleaner "LN wins" story. A
+plausible reason: with only 4 examples per step, any normalization
+(batch or layer) adds its own per-step noise/overhead that a short,
+small-subset run may not fully pay off on, while 1000-unit-wide ReLU
+layers with small-scale init are already reasonably well-behaved
+unnormalized at this scale — consistent with 04_adam's entry 7 finding
+that this same architecture trains fine without any special handling in
+some regimes and badly in others, i.e. this network's trainability is
+sensitive to exact setup in ways that don't always point the direction a
+mechanism's motivating story suggests.
