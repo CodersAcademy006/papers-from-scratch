@@ -122,3 +122,67 @@ own 32x32 images are already at the target resolution with no room for
 that kind of crop augmentation at the same scale. ILSVRC-2012 multi-model
 averaging results (Section 6, Table 2) are a competition-entry ensembling
 detail, not part of the architecture.
+
+## Entry 4 — Three new mechanisms, gradchecked, then the CIFAR-10 rescale arithmetic
+
+`conv2d.py` extends 06_lenet5's im2col `Conv2D` with stride and zero-
+padding (needed for "same" padding on a 32x32 input, and because the
+paper's own layer 1 uses stride 4) — no sparse-connectivity mask this
+time, since that was specifically C3's irregular wiring in LeNet-5 and
+AlexNet has no equivalent (entry 3: the 2-GPU split isn't reproduced).
+
+`lrn.py` is new: Local Response Normalization (entry 2's quoted formula)
+normalizes each channel against its `n=5` adjacent *channels* at the same
+spatial position, not a spatial window — the backward pass has both a
+direct term (`d(out_i)/d(a_i)` through the numerator) and a cross term
+for every channel `j` in `i`'s window (through the shared denominator),
+including a same-index contribution from `j=i` in both terms at once,
+since channel `i` is always inside its own window. Worked out by hand
+first, then gradchecked rather than trusted on the derivation alone.
+
+`maxpool.py` is new: overlapping max-pooling (`z=3, s=2`, entry 2) —
+stride smaller than the window means adjacent pooling regions share a
+column/row of input pixels, tracked via one `argmax` array per pooling
+window rather than per-pixel index bookkeeping.
+
+All three gradchecked before composing (`test_gradcheck.py`): Conv2D with
+`stride=2, padding=2`, LRN, and overlapping MaxPool. All three passed on
+the first real run:
+
+```
+Conv2D (stride=2, padding=2) gradcheck passed: worst rel err dW=6.08e-12 db=4.26e-12 dx=1.75e-09
+LRN gradcheck passed: worst rel err dx=5.32e-10
+MaxPool (z=3,s=2 overlapping) gradcheck passed: worst rel err dx=4.71e-11
+```
+
+No bug this time, including LRN's cross-channel term, which was the one
+most likely to have an off-by-one in the window bounds or a missed
+same-index contribution — genuinely clean, not smoothed over.
+
+**CIFAR-10 kernel/channel re-scaling arithmetic**, worked out now rather
+than guessed in entry 3: the paper's 11x11-stride-4 first layer alone
+would reduce a 32x32 input to 6x6 in one layer, leaving nothing for four
+more conv layers. Re-scaled to keep 5 conv + 3 FC layers, ReLU
+everywhere, LRN after conv1/conv2 (before pooling, matching the paper's
+own layer order), overlapping `z=3,s=2` pooling after both LRN layers and
+after conv5, and conv3/4/5 connected directly with no intervening
+pool/norm (matching entry 2's quote) — same *shape* of network, not the
+same literal sizes:
+
+```
+input            32x32x3
+conv1  5x5 s1 p2 32x32x32   -> ReLU -> LRN -> pool(3,2) -> 15x15x32
+conv2  5x5 s1 p2 15x15x64   -> ReLU -> LRN -> pool(3,2) ->  7x7x64
+conv3  3x3 s1 p1  7x7x96    -> ReLU
+conv4  3x3 s1 p1  7x7x96    -> ReLU
+conv5  3x3 s1 p1  7x7x64    -> ReLU -> pool(3,2)        ->  3x3x64 = 576 flat
+FC6    576->384  ReLU, dropout 0.5
+FC7    384->192  ReLU, dropout 0.5
+FC8    192->10   softmax+cross-entropy
+```
+
+Channel counts (32/64/96/96/64, FC widths 384/192) are a proportional
+scale-down of the paper's 96/256/384/384/256 and 4096/4096 for a
+10-class, 32x32 problem, not derived from any formula in the paper —
+flagged as a judgment call, not a literal reproduction of a number the
+paper specifies.
