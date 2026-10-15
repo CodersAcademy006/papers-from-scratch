@@ -243,3 +243,48 @@ through deep computation graphs, not specific to this architecture or a
 sign of a mistake — flagged here because the honest thing to do with a
 gradcheck number that's an order of magnitude worse than its neighbors is
 explain why, not quietly round it off as "still passing."
+
+## Entry 6 — The real training run: close to the paper, not identical, and why
+
+`run_experiment.py` trained on the full 60,000-example MNIST set for 20
+epochs (matching the paper's own pass count), batch size 128, Adam
+(entry 3's substitution for the paper's Stochastic Diagonal Levenberg-
+Marquardt). Download hiccup first: the first launch stalled silently on
+one of the four MNIST files (a `curl` subprocess sitting at a partial
+byte count with no progress for several minutes) — killed it, deleted the
+incomplete `.gz`, redownloaded cleanly, relaunched. Noting this because it
+genuinely happened, not because it says anything about the implementation.
+
+Final epoch (20th, 0-indexed 19): train NLL 0.0066, test error **1.17%**.
+The paper's own headline, no-distortion number (Fig. 5/6) is **0.95%**.
+Close, matching the paper's overall training-curve *shape* closely (fast
+initial drop in the first 2-3 epochs, then a long, noisy-but-monotonic
+tail — the figure below looks like a rescaled version of the paper's own
+Fig. 5, not a different-shaped curve), but not an exact match, and this
+entry says so plainly rather than rounding 1.17% down to "about the
+same."
+
+Plausible, non-exhaustive reasons for the ~0.2-point gap, none of them
+fixed by just training longer (test error had already flattened into a
+noisy 1.1-1.5% band by epoch 8, twelve epochs before training ended):
+
+- **Output layer substitution** (entry 3): softmax+cross-entropy here vs.
+  the paper's 10 fixed-prototype Euclidean RBF units. These are different
+  loss landscapes near the decision boundary, not just cosmetically
+  different output layers.
+- **Optimizer substitution** (entry 3): Adam vs. Stochastic Diagonal
+  Levenberg-Marquardt, which specifically re-estimates per-parameter
+  curvature from a 500-example subset before every pass — a mechanism
+  with no equivalent in Adam's moving averages.
+- **Dataset provenance** (entry 3): standard MNIST's test split isn't
+  guaranteed to be pixel-identical to the paper's own NIST SD-1/SD-3
+  writer-based split, even though both are "the" MNIST test set in every
+  practical sense.
+
+Every other piece of this implementation (the architecture, the weight
+init rule, the C3 connection table, the pixel normalization) was checked
+against the paper's own numbers already (entries 2, 4, 5) — the gap here
+is attributable to the three *explicitly flagged* substitutions from
+entry 3, not to an unverified or silently-wrong component. 1.17% vs.
+0.95% is the kind of gap a real, honest, partial reproduction produces;
+reporting it as "basically 0.95%" would be the dishonest move.
