@@ -6,7 +6,7 @@ Hard research papers, implemented from scratch. No framework shortcuts — build
 
 To redeploy after editing `docs/index.html`: `cd docs && vercel deploy --prod --yes`. Project is already linked (`codersacademy006s-projects/papers-from-scratch`), so this is the only command needed — no new setup.
 
-Implemented so far: 5
+Implemented so far: 6
 
 ## A. Core autodiff & training infra
 - [x] 01 [Learning representations by back-propagating errors](https://www.nature.com/articles/323533a0) (Rumelhart, Hinton, Williams 1986) — `01_backprop_autograd/` ([journal](01_backprop_autograd/JOURNAL.md))
@@ -16,7 +16,7 @@ Implemented so far: 5
 - [x] 05 [Layer Normalization](https://arxiv.org/abs/1607.06450) (2016) — `05_layernorm/` ([journal](05_layernorm/JOURNAL.md))
 
 ## B. CNN / vision classics
-- [ ] 06 [LeNet-5](https://ieeexplore.ieee.org/document/726791) (LeCun et al 1998) — `06_lenet5/`
+- [x] 06 [LeNet-5](https://ieeexplore.ieee.org/document/726791) (LeCun et al 1998) — `06_lenet5/` ([journal](06_lenet5/JOURNAL.md))
 - [ ] 07 [AlexNet](https://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks) (2012) — `07_alexnet/`
 - [ ] 08 [VGGNet](https://arxiv.org/abs/1409.1556) (2014) — `08_vggnet/`
 - [ ] 09 [ResNet](https://arxiv.org/abs/1512.03385) (2015) — `09_resnet/`
