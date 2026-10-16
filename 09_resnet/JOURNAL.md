@@ -176,3 +176,53 @@ a defect in this repo's math. Confirmed harmless and left as-is (the
 gradcheck script doesn't filter it, since filtering a warning one hasn't
 verified is benign would be the wrong default -- this one specifically
 has been).
+
+## Entry 5: Final training results
+
+Config: 8 epochs, 5000-example training subset (same reduced-subset
+precedent as 08_vggnet), batch 128, full 10000-example test set for
+evaluation. SGD momentum 0.9, weight decay 1e-4, lr=0.1 -- the paper's
+own CIFAR-10 starting LR (Section 4.2), unlike 08_vggnet which had to cut
+its borrowed ImageNet-recipe LR by 100x after an actual gradient-explosion
+bug. Here lr=0.1 is stable from the first batch: a timing probe on random
+data showed sane ~3.1 loss with no blowup, and a full real smoke-test
+epoch confirmed it (loss 2.78->1.57 across the epoch, no NaN) before the
+real run was launched. First real sign this paper's own hyperparameters
+are actually scaled for CIFAR-10 already, not borrowed from ImageNet.
+
+Train NLL: smooth, monotonic every epoch -- 2.3444, 1.8494, 1.7144,
+1.6707, 1.5793, 1.5052, 1.4669, 1.4612.
+
+Test error: 74.44%, 69.57%, 64.85%, 69.29%, 60.93%, 55.42%, 70.88%,
+56.13%. Overall declining (74.44% -> 56.13%) but genuinely noisy
+epoch-to-epoch, not monotonic like 07_alexnet/08_vggnet's test curves
+were -- best was epoch 5 (55.42%), epoch 6 jumped back up to 70.88%
+before epoch 7 recovered to 56.13%. lr never decayed: the patience-3
+counter reset on every new best and only ever reached 2 consecutive
+non-improving epochs (epoch 3, then epoch 6/7), never the 3 needed to
+trigger a decay -- the log confirms lr=0.10000 unchanged across all 8
+rows.
+
+Honest read of the noise: this run never gets the stabilizing LR decay
+the paper's own schedule relies on (divide by 10 at 32k/48k of 64k total
+iterations -- this run's entire 8-epoch budget is roughly 312 iterations
+at batch 128 over a 5000-example subset, nowhere near that schedule's
+regime to begin with, the same subset-vs-iteration-count scope cut
+08_vggnet/07_alexnet already made explicit in entry 3). Three compounding
+sources of batch-to-batch variance at this reduced scale: (1) BatchNorm's
+batch statistics are computed from a 128-example minibatch, noisier than
+the paper's own batches on a 45k-image set; (2) the pad-4/crop/hflip
+augmentation randomizes every single batch, so no two epochs see the same
+inputs even over the same 5000-image subset; (3) a constant high LR
+(0.1, never decayed here) keeps the optimizer taking large steps for the
+entire run instead of settling as training progresses. None of this is a
+bug -- gradcheck (entry 4) already confirmed the backward pass is exact;
+it is what training a 20-layer net at the paper's own LR, with no
+warmup and no decay, on a 10%-sized subset for 8 epochs actually looks
+like once run for real.
+
+Not claiming comparison to the paper's own reported number (~8.75% test
+error for ResNet-20, full 45k/5k split, 64k iterations with LR decay --
+Table 6): different training budget by roughly two orders of magnitude,
+same honest-no-fabricated-baseline stance as every other paper in this
+series.
