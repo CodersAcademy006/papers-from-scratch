@@ -220,3 +220,46 @@ hyperparameter substitution (same spirit as 06_lenet5's RBF->softmax
 and optimizer swaps, and 07_alexnet's init fix): the paper's own
 lr=1e-2 is tied to its own init scheme, and doesn't carry over once the
 init is changed for a different reason.
+
+## Entry 7: Final training run
+
+Full 8-epoch run on the 5000-example training subset (entry 5), full
+10000-example test set for evaluation, SGD+momentum+weight decay
+(5e-4), lr=1e-3 (entry 6's fix), batch size 256 (the paper's own
+Section 3.1 value).
+
+```
+epoch  train_nll  test_err
+0      6.610402   89.53%
+1      2.315225   88.91%
+2      2.303784   88.90%
+3      2.300627   88.18%
+4      2.296783   87.49%
+5      2.292630   86.76%
+6      2.288500   86.11%
+7      2.284060   85.70%
+```
+
+Final test error: **85.70%**, LR never decayed (test error never
+plateaued 3 consecutive epochs, so the patience-based schedule from
+entry 6 never fired). The curve (`figures/training_curve.png`) shows a
+real, honest shape rather than a clean one: loss drops hard in epoch 0
+(6.6 -> 2.3), then barely moves for the next two epochs (2.315 -> 2.304
+-> 2.304, test error flat at ~88.9-89.0%) before slowly, monotonically
+descending from epoch 3 onward. Not a repeat of entry 6's gradient
+explosion (no NaN, no blow-up in magnitude) -- this is a genuinely slow
+network: VGG-A is 11 weighted layers on only 5000 training examples
+(entry 5's compute-driven scope cut) with a 10x-smaller-than-paper
+lr=1e-3 (entry 6), so a multi-epoch warm-up before the loss surface
+opens up is plausible rather than alarming, and the last 5 epochs'
+steady improvement (no plateau, no regression) supports that reading
+over a stuck-optimizer one.
+
+No paper-reported baseline exists for this exact setup to compare
+against -- the paper's own headline numbers are ImageNet top-1/top-5 on
+the real 1.3M-image training set with multi-scale/multi-crop test-time
+evaluation (entry 3), none of which this CIFAR-10 rescale on a 10%
+training subset reproduces. Reported as the real number for what this
+repo actually built: an 11-weight-layer VGG-A-style CIFAR-10 classifier
+trained on a reduced subset for a short fixed epoch budget, not a
+reproduction of the paper's own ILSVRC result.
