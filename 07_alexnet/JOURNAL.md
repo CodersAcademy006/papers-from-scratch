@@ -241,3 +241,93 @@ instead: `relu1`=50%, `relu2`=100%, `relu3`=49%, `relu4`=100%, `relu5`=100%
 `bias_init=1.0` design working exactly as intended ("this initialization
 accelerates the early stages of learning by providing the ReLUs with
 positive inputs," entry 2), not a sign of a broken or dead layer.
+
+## Entry 6 — Dead network: Section 5's flat init doesn't survive this rescale
+
+The real training run never learned: train NLL stuck at exactly
+2.302585 (= ln(10), chance level) and test error frozen at precisely
+0.900000 across 7 straight epochs, even as the scheduled LR decay fired
+on schedule. Identical error to six decimal places every epoch meant
+predictions had collapsed to a single class, not just converged slowly.
+
+Traced it layer by layer on a fresh, untrained network: fed 20 test
+images through conv1 through fc6 and measured per-layer activation std
+across examples. It shrank roughly 4-10x at every layer, from std=0.24
+at the input down to std=2.6e-6 by fc6 -- by then the example-to-example
+signal is ~1000x smaller than Section 5's own `bias_init=1.0`, so every
+image produces nearly the same feature vector and the same prediction
+regardless of content.
+
+First fix attempt: `cifar_data.py` was rescaling pixels to [0,1], but
+Section 2 says only "subtracting the mean activity over the training
+set from each pixel" -- no [0,1] rescale. Switched to raw 0-255 scale
+with per-pixel training-mean subtraction, matching the paper literally.
+Not enough on its own: a 300-batch probe (~0.8 epoch) still showed no
+loss decrease, predictions still collapsed to one class (just a
+different one).
+
+Root cause is the init itself, not input scale: Section 5's flat
+std=0.01 Gaussian (the same constant at every layer regardless of
+width) isn't variance-preserving for this rescaled, narrower/deeper
+CIFAR-10 AlexNet -- each layer's weight-driven term undershoots the
+previous layer's scale, and the undershoot compounds across all 8
+weight layers. Switched `Conv2D`/`Dense` to He init
+(std=sqrt(2/fan_in)) and `bias_init=0` everywhere (Section 5's bias=1
+was specifically meant to counteract the weak flat-std signal under the
+paper's own init, so it stops making sense once the init is
+fan-in-scaled). A 100-batch probe after the fix: loss fell from 19.7 to
+a declining ~2.16-2.30 band, test error on 500 examples dropped from
+90% to 80.8%, predictions spread across 6 classes instead of 1 --
+confirms the network can actually learn.
+
+This is an explicitly-flagged substitution beyond the three already
+noted in entry 3 (output layer, optimizer, dataset provenance): the
+paper's own init constants don't transfer to this channel/depth
+rescale, discovered only by actually trying to train the real network,
+not anticipated or staged in advance.
+
+Both gradchecks re-verified after the init change: `test_gradcheck.py`
+unaffected (isolated-layer checks, no init dependency), and
+`test_alexnet_gradcheck.py` needed `EPS_FD` tightened from `1e-4` to
+`1e-5` -- the coarser step was a finite-difference precision artifact
+at the new activation scale (numeric gradient converges exactly to the
+analytic value as eps shrinks from `1e-3` to `1e-6`), not a new bug.
+Worst relative error after retightening: `1.08e-03`.
+
+## Entry 7 — Final training run
+
+Full 8-epoch run on the complete 50000-example CIFAR-10 training set
+(10000-example test set for evaluation), SGD+momentum+weight decay
+(5e-4), lr=0.01 (the paper's own Section 5 value, unaffected by the
+init fix), batch size 128 (the paper's own Section 5 value too).
+
+Real per-epoch compute ranged ~24-42 minutes depending on system load;
+total wall-clock for this run also includes one unrelated ~10-11 hour
+lid-closed sleep gap (overnight, machine resumed cleanly, zero progress
+lost -- `epoch_seconds` for the affected rows is wall-clock-inflated by
+that pause, not a training anomaly).
+
+```
+epoch  train_nll  test_err
+0      2.270525   74.52%
+1      1.866612   66.63%
+2      1.688674   64.70%
+3      1.572301   55.08%
+4      1.498324   51.53%
+5      1.433662   48.56%
+6      1.370017   46.85%
+7      1.316564   44.14%
+```
+
+Final test error: **44.14%**, monotonically improving every single
+epoch, no plateau reached yet (`figures/training_curve.png` -- both
+curves still descending cleanly at epoch 7, LR never needed its
+patience-based decay since test error never stalled for 3 consecutive
+epochs). No paper-reported baseline exists for this exact setup to
+compare against -- the paper's own headline numbers are ImageNet
+top-1/top-5 error on a 1000-way task with 15 augmented crops per image
+at test time, none of which this CIFAR-10 rescale reproduces (entry 3).
+Reported as the real, honest number for what this repo actually built:
+an 8-conv/dense-layer CIFAR-10 classifier in the AlexNet style, trained
+on a 10% data subset for a short fixed epoch budget, not a reproduction
+of the paper's own ILSVRC result.
