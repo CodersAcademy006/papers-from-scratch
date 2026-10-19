@@ -6,6 +6,7 @@ dense.py is an unchanged duplicate already gradchecked in 07_alexnet/
 gradchecked in 03_batchnorm/test_gradcheck.py -- bn2d.py only reshapes
 and delegates to it, checked here through the 2D wrapper instead."""
 import numpy as np
+from pathlib import Path
 from conv2d import Conv2D
 from bn2d import BatchNorm2d
 from residual_block import IdentityShortcut, BasicBlock
@@ -14,6 +15,7 @@ EPS_FD = 1e-5
 REL_TOL = 1e-3
 ABS_TOL = 1e-4
 rng = np.random.default_rng(0)
+CHECK_LOG = []  # (name, worst_rel_err) -- for figures/gradcheck_summary.png
 
 
 def check(name, x, f, df_dx, n_checks=8):
@@ -33,7 +35,34 @@ def check(name, x, f, df_dx, n_checks=8):
         worst = max(worst, e)
         assert e < REL_TOL or abs(analytic - numeric) < ABS_TOL, \
             f"{name}{multi}: analytic={analytic:.6f} numeric={numeric:.6f} rel_err={e:.2e}"
+    CHECK_LOG.append((name, worst))
     return worst
+
+
+def save_summary_figure():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    STATUS_GOOD = "#0ca30c"
+    fig, ax = plt.subplots(figsize=(7, max(2, 0.4 * len(CHECK_LOG))))
+    names = [n for n, _ in CHECK_LOG]
+    errs = [max(e, 1e-13) for _, e in CHECK_LOG]
+    ax.barh(range(len(CHECK_LOG)), errs, color=STATUS_GOOD, height=0.6)
+    ax.set_yticks(range(len(CHECK_LOG)))
+    ax.set_yticklabels(names, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xscale("log")
+    ax.axvline(REL_TOL, color="#555555", linestyle="--", linewidth=1, label=f"REL_TOL ({REL_TOL:.0e})")
+    ax.set_xlabel("worst relative error vs. finite-difference (log scale)")
+    ax.set_title("09_resnet gradcheck -- worst relative error per layer/param")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, loc="lower right", fontsize=8)
+    fig.tight_layout()
+    out_dir = Path(__file__).parent / "figures"
+    out_dir.mkdir(exist_ok=True)
+    fig.savefig(out_dir / "gradcheck_summary.png", dpi=150)
+    plt.close(fig)
+    print(f"saved {out_dir / 'gradcheck_summary.png'}")
 
 
 if __name__ == "__main__":
@@ -50,9 +79,9 @@ if __name__ == "__main__":
     dout = out - y_target
     dx, dW, db = conv.backward(dout)
 
-    w_x = check("x", x, loss_conv, dx)
-    w_W = check("W", conv.W, loss_conv, dW)
-    w_b = check("b", conv.b, loss_conv, db)
+    w_x = check("Conv2D.dx", x, loss_conv, dx)
+    w_W = check("Conv2D.dW", conv.W, loss_conv, dW)
+    w_b = check("Conv2D.db", conv.b, loss_conv, db)
     print(f"Conv2D (stride=2, padding=1, 3x3) gradcheck passed: worst rel err dx={w_x:.2e} dW={w_W:.2e} db={w_b:.2e}")
 
     # BatchNorm2d, spatial BN over conv feature maps (N,C,H,W)
@@ -70,9 +99,9 @@ if __name__ == "__main__":
     dout2 = out2 - y_target2
     dx2, dgamma2, dbeta2 = bn.backward(dout2, cache2)
 
-    w_bx = check("x", x2, loss_bn, dx2)
-    w_bg = check("gamma", bn.gamma, loss_bn, dgamma2)
-    w_bb = check("beta", bn.beta, loss_bn, dbeta2)
+    w_bx = check("BatchNorm2d.dx", x2, loss_bn, dx2)
+    w_bg = check("BatchNorm2d.dgamma", bn.gamma, loss_bn, dgamma2)
+    w_bb = check("BatchNorm2d.dbeta", bn.beta, loss_bn, dbeta2)
     print(f"BatchNorm2d gradcheck passed: worst rel err dx={w_bx:.2e} dgamma={w_bg:.2e} dbeta={w_bb:.2e}")
 
     # IdentityShortcut (option A): stride-2 subsample + zero-pad channels, parameter-free
@@ -88,7 +117,7 @@ if __name__ == "__main__":
     dout3 = out3 - y_target3
     dx3 = shortcut.backward(dout3)
 
-    w_sx = check("x", x3, loss_shortcut, dx3)
+    w_sx = check("IdentityShortcut.dx", x3, loss_shortcut, dx3)
     print(f"IdentityShortcut (stride=2, 8->16ch) gradcheck passed: worst rel err dx={w_sx:.2e}")
 
     # BasicBlock, stride=2 + channel change (crosses a stage boundary, exercises the shortcut)
@@ -104,11 +133,12 @@ if __name__ == "__main__":
     dout4 = out4 - y_target4
     dx4, grads4 = block.backward(dout4, prefix='block')
 
-    w_4x = check("x", x4, loss_block, dx4)
-    w_4w1 = check("conv1.W", block.conv1.W, loss_block, grads4['block.conv1.W'])
-    w_4w2 = check("conv2.W", block.conv2.W, loss_block, grads4['block.conv2.W'])
-    w_4g1 = check("bn1.gamma", block.bn1.gamma, loss_block, grads4['block.bn1.gamma'])
-    w_4g2 = check("bn2.gamma", block.bn2.gamma, loss_block, grads4['block.bn2.gamma'])
+    w_4x = check("BasicBlock.dx", x4, loss_block, dx4)
+    w_4w1 = check("BasicBlock.conv1.W", block.conv1.W, loss_block, grads4['block.conv1.W'])
+    w_4w2 = check("BasicBlock.conv2.W", block.conv2.W, loss_block, grads4['block.conv2.W'])
+    w_4g1 = check("BasicBlock.bn1.gamma", block.bn1.gamma, loss_block, grads4['block.bn1.gamma'])
+    w_4g2 = check("BasicBlock.bn2.gamma", block.bn2.gamma, loss_block, grads4['block.bn2.gamma'])
     print(f"BasicBlock (stride=2, 8->16ch, option-A shortcut) gradcheck passed: "
           f"worst rel err dx={w_4x:.2e} dW1={w_4w1:.2e} dW2={w_4w2:.2e} "
           f"dgamma1={w_4g1:.2e} dgamma2={w_4g2:.2e}")
+    save_summary_figure()
