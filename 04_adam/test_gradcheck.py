@@ -15,12 +15,14 @@ activation is within a safety margin of zero for ANY example are now
 excluded from the sample pool below, rather than papered over with a looser
 tolerance."""
 import numpy as np
+from pathlib import Path
 from mlp_relu import ReLUMLP
 
 EPS = 1e-5
 REL_TOL = 1e-4
 ABS_TOL = 1e-6
 KINK_MARGIN = 1e-3  # exclude units whose pre-activation is this close to 0 for any example
+CHECK_LOG = []  # (name, worst_rel_err) -- for figures/gradcheck_summary.png
 
 
 def main():
@@ -58,12 +60,14 @@ def main():
     worst = 0.0
     checked = 0
     skipped = 0
+    param_names = [f"W{l}" for l in range(net.n_layers)] + [f"b{l}" for l in range(net.n_layers)]
     for p_idx, p in enumerate(params):
         l = p_idx if p_idx < net.n_layers else p_idx - net.n_layers  # W[0..n-1] then b[0..n-1]
         is_bias = p_idx >= net.n_layers
         flat = list(np.ndindex(p.shape))
         candidates = rng.permutation(len(flat))
         taken = 0
+        group_worst = 0.0
         for k in candidates:
             idx = flat[k]
             unit = idx[0] if is_bias else idx[0]  # row of W, or the single bias index -- both index the OUTPUT unit
@@ -78,13 +82,44 @@ def main():
                 f"param {p_idx} idx {idx}: analytic={ana:.8f} numeric={num:.8f} rel_err={rel:.2e}"
             )
             worst = max(worst, rel)
+            group_worst = max(group_worst, rel)
             checked += 1
             taken += 1
             if taken >= 5:
                 break
+        if taken > 0:
+            CHECK_LOG.append((param_names[p_idx], group_worst))
 
     print(f"gradcheck passed, {checked} params sampled ({skipped} skipped as kink-adjacent), "
           f"worst relative error = {worst:.2e}")
+    save_summary_figure()
+
+
+def save_summary_figure():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    STATUS_GOOD = "#0ca30c"
+    fig, ax = plt.subplots(figsize=(7, max(2, 0.4 * len(CHECK_LOG))))
+    names = [n for n, _ in CHECK_LOG]
+    errs = [max(e, 1e-13) for _, e in CHECK_LOG]
+    ax.barh(range(len(CHECK_LOG)), errs, color=STATUS_GOOD, height=0.6)
+    ax.set_yticks(range(len(CHECK_LOG)))
+    ax.set_yticklabels(names, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xscale("log")
+    ax.axvline(REL_TOL, color="#555555", linestyle="--", linewidth=1, label=f"REL_TOL ({REL_TOL:.0e})")
+    ax.set_xlabel("worst relative error vs. finite-difference (log scale)")
+    ax.set_title("04_adam gradcheck -- worst relative error per parameter\n"
+                  "(kink-adjacent units excluded, see module docstring)")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, loc="lower right", fontsize=8)
+    fig.tight_layout()
+    out_dir = Path(__file__).parent / "figures"
+    out_dir.mkdir(exist_ok=True)
+    fig.savefig(out_dir / "gradcheck_summary.png", dpi=150)
+    plt.close(fig)
+    print(f"saved {out_dir / 'gradcheck_summary.png'}")
 
 
 if __name__ == "__main__":
