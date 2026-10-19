@@ -3,6 +3,7 @@ Numerical gradient checks for Conv2D and SubsampleLayer, in isolation,
 before composing them into the full network.
 """
 import numpy as np
+from pathlib import Path
 from conv2d import Conv2D
 from subsample import SubsampleLayer
 
@@ -10,6 +11,7 @@ EPS_FD = 1e-5
 REL_TOL = 1e-4
 ABS_TOL = 1e-5
 rng = np.random.default_rng(0)
+CHECK_LOG = []  # (name, worst_rel_err) -- for figures/gradcheck_summary.png
 
 
 def rel_err(a, n):
@@ -74,6 +76,9 @@ def test_conv2d_full():
         assert e < REL_TOL or abs(analytic - numeric) < ABS_TOL, f"x{multi}: {analytic} vs {numeric}"
 
     print(f"Conv2D (full connectivity) gradcheck passed: worst rel err dW={wW:.2e} db={wb:.2e} dx={worst_x:.2e}")
+    CHECK_LOG.append(("Conv2D(full).dW", wW))
+    CHECK_LOG.append(("Conv2D(full).db", wb))
+    CHECK_LOG.append(("Conv2D(full).dx", worst_x))
 
 
 def test_conv2d_sparse():
@@ -94,6 +99,7 @@ def test_conv2d_sparse():
 
     w = check_param(conv.W, dW, f_W, "W_sparse", n_checks=8)
     print(f"Conv2D (sparse connectivity, C3-style) gradcheck passed: worst rel err dW={w:.2e}, zero-masked entries confirmed")
+    CHECK_LOG.append(("Conv2D(sparse).dW", w))
 
 
 def test_subsample():
@@ -133,9 +139,39 @@ def test_subsample():
         assert e < REL_TOL or abs(analytic - numeric) < ABS_TOL, f"x{multi}: {analytic} vs {numeric}"
 
     print(f"SubsampleLayer gradcheck passed: worst rel err dcoeff={wc:.2e} dbias={wb:.2e} dx={worst_x:.2e}")
+    CHECK_LOG.append(("SubsampleLayer.dcoeff", wc))
+    CHECK_LOG.append(("SubsampleLayer.dbias", wb))
+    CHECK_LOG.append(("SubsampleLayer.dx", worst_x))
+
+
+def save_summary_figure():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    STATUS_GOOD = "#0ca30c"
+    fig, ax = plt.subplots(figsize=(7, max(2, 0.4 * len(CHECK_LOG))))
+    names = [n for n, _ in CHECK_LOG]
+    errs = [max(e, 1e-13) for _, e in CHECK_LOG]
+    ax.barh(range(len(CHECK_LOG)), errs, color=STATUS_GOOD, height=0.6)
+    ax.set_yticks(range(len(CHECK_LOG)))
+    ax.set_yticklabels(names, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xscale("log")
+    ax.axvline(REL_TOL, color="#555555", linestyle="--", linewidth=1, label=f"REL_TOL ({REL_TOL:.0e})")
+    ax.set_xlabel("worst relative error vs. finite-difference (log scale)")
+    ax.set_title("06_lenet5 gradcheck -- worst relative error per layer/param")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, loc="lower right", fontsize=8)
+    fig.tight_layout()
+    out_dir = Path(__file__).parent / "figures"
+    out_dir.mkdir(exist_ok=True)
+    fig.savefig(out_dir / "gradcheck_summary.png", dpi=150)
+    plt.close(fig)
+    print(f"saved {out_dir / 'gradcheck_summary.png'}")
 
 
 if __name__ == "__main__":
     test_conv2d_full()
     test_conv2d_sparse()
     test_subsample()
+    save_summary_figure()
