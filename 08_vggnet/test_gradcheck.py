@@ -2,6 +2,7 @@
 the full VGG-A network. dense.py/dropout.py are unchanged duplicates
 already gradchecked in 07_alexnet, not re-checked here."""
 import numpy as np
+from pathlib import Path
 from conv2d import Conv2D
 from maxpool import MaxPool
 
@@ -9,6 +10,7 @@ EPS_FD = 1e-5
 REL_TOL = 1e-3
 ABS_TOL = 1e-4
 rng = np.random.default_rng(0)
+CHECK_LOG = []  # (name, worst_rel_err) -- for figures/gradcheck_summary.png
 
 
 def check(name, x, f, df_dx, n_checks=8):
@@ -28,7 +30,34 @@ def check(name, x, f, df_dx, n_checks=8):
         worst = max(worst, e)
         assert e < REL_TOL or abs(analytic - numeric) < ABS_TOL, \
             f"{name}{multi}: analytic={analytic:.6f} numeric={numeric:.6f} rel_err={e:.2e}"
+    CHECK_LOG.append((name, worst))
     return worst
+
+
+def save_summary_figure():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    STATUS_GOOD = "#0ca30c"
+    fig, ax = plt.subplots(figsize=(7, max(2, 0.4 * len(CHECK_LOG))))
+    names = [n for n, _ in CHECK_LOG]
+    errs = [max(e, 1e-13) for _, e in CHECK_LOG]
+    ax.barh(range(len(CHECK_LOG)), errs, color=STATUS_GOOD, height=0.6)
+    ax.set_yticks(range(len(CHECK_LOG)))
+    ax.set_yticklabels(names, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xscale("log")
+    ax.axvline(REL_TOL, color="#555555", linestyle="--", linewidth=1, label=f"REL_TOL ({REL_TOL:.0e})")
+    ax.set_xlabel("worst relative error vs. finite-difference (log scale)")
+    ax.set_title("08_vggnet gradcheck -- worst relative error per layer/param")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, loc="lower right", fontsize=8)
+    fig.tight_layout()
+    out_dir = Path(__file__).parent / "figures"
+    out_dir.mkdir(exist_ok=True)
+    fig.savefig(out_dir / "gradcheck_summary.png", dpi=150)
+    plt.close(fig)
+    print(f"saved {out_dir / 'gradcheck_summary.png'}")
 
 
 if __name__ == "__main__":
@@ -45,9 +74,9 @@ if __name__ == "__main__":
     dout = out - y_target
     dx, dW, db = conv.backward(dout)
 
-    w_x = check("x", x, loss_conv, dx)
-    w_W = check("W", conv.W, loss_conv, dW)
-    w_b = check("b", conv.b, loss_conv, db)
+    w_x = check("Conv2D.dx", x, loss_conv, dx)
+    w_W = check("Conv2D.dW", conv.W, loss_conv, dW)
+    w_b = check("Conv2D.db", conv.b, loss_conv, db)
     print(f"Conv2D (stride=1, padding=1, 3x3) gradcheck passed: worst rel err dx={w_x:.2e} dW={w_W:.2e} db={w_b:.2e}")
 
     # MaxPool, 2x2 stride 2 (non-overlapping)
@@ -63,5 +92,6 @@ if __name__ == "__main__":
     dout2 = out2 - y_target2
     dx2 = pool.backward(dout2)
 
-    w_px = check("x", x2, loss_pool, dx2)
+    w_px = check("MaxPool.dx", x2, loss_pool, dx2)
     print(f"MaxPool (2x2, s=2, non-overlapping) gradcheck passed: worst rel err dx={w_px:.2e}")
+    save_summary_figure()
