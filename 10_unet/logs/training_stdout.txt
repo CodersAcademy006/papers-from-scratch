@@ -1,0 +1,40 @@
+epoch  1/30  train_loss=1.5374  val_loss=1.2440  val_acc=0.8091  lr=0.01000  elapsed=8.7s
+epoch  2/30  train_loss=1.2346  val_loss=1.1388  val_acc=0.6602  lr=0.01000  elapsed=17.4s
+epoch  3/30  train_loss=1.1467  val_loss=1.1111  val_acc=0.8507  lr=0.01000  elapsed=26.1s
+epoch  4/30  train_loss=1.0929  val_loss=1.2735  val_acc=0.7676  lr=0.01000  elapsed=34.8s
+epoch  5/30  train_loss=0.9958  val_loss=0.9760  val_acc=0.7874  lr=0.01000  elapsed=43.6s
+epoch  6/30  train_loss=0.9890  val_loss=0.9216  val_acc=0.8783  lr=0.01000  elapsed=52.3s
+epoch  7/30  train_loss=0.9788  val_loss=0.9475  val_acc=0.7948  lr=0.01000  elapsed=61.0s
+epoch  8/30  train_loss=0.9473  val_loss=0.8575  val_acc=0.8712  lr=0.01000  elapsed=69.7s
+epoch  9/30  train_loss=0.9582  val_loss=0.8134  val_acc=0.8092  lr=0.01000  elapsed=78.4s
+epoch 10/30  train_loss=0.9629  val_loss=0.9103  val_acc=0.7655  lr=0.01000  elapsed=87.1s
+epoch 11/30  train_loss=0.8781  val_loss=0.8552  val_acc=0.8489  lr=0.01000  elapsed=95.8s
+epoch 12/30  train_loss=0.8881  val_loss=0.8864  val_acc=0.8532  lr=0.01000  elapsed=104.5s
+  -> no improvement for 3 epochs, lr decayed to 0.00100
+epoch 13/30  train_loss=0.9107  val_loss=0.8057  val_acc=0.8551  lr=0.00100  elapsed=113.2s
+epoch 14/30  train_loss=0.8529  val_loss=0.7796  val_acc=0.8783  lr=0.00100  elapsed=121.9s
+epoch 15/30  train_loss=0.8618  val_loss=0.6032  val_acc=0.9047  lr=0.00100  elapsed=130.8s
+epoch 16/30  train_loss=0.8664  val_loss=0.8459  val_acc=0.8748  lr=0.00100  elapsed=139.8s
+epoch 17/30  train_loss=0.8311  val_loss=0.7750  val_acc=0.8671  lr=0.00100  elapsed=148.9s
+epoch 18/30  train_loss=0.8479  val_loss=0.7435  val_acc=0.8707  lr=0.00100  elapsed=158.1s
+  -> no improvement for 3 epochs, lr decayed to 0.00010
+epoch 19/30  train_loss=0.8186  val_loss=0.9116  val_acc=0.8541  lr=0.00010  elapsed=167.5s
+epoch 20/30  train_loss=0.8660  val_loss=0.7669  val_acc=0.8432  lr=0.00010  elapsed=176.9s
+epoch 21/30  train_loss=0.8254  val_loss=1.2093  val_acc=0.8515  lr=0.00010  elapsed=186.5s
+  -> no improvement for 3 epochs, lr decayed to 0.00001
+epoch 22/30  train_loss=0.8190  val_loss=1.0263  val_acc=0.7978  lr=0.00001  elapsed=196.0s
+epoch 23/30  train_loss=0.8960  val_loss=0.7829  val_acc=0.8504  lr=0.00001  elapsed=205.6s
+epoch 24/30  train_loss=0.8756  val_loss=0.8526  val_acc=0.8790  lr=0.00001  elapsed=215.2s
+  -> no improvement for 3 epochs, lr decayed to 0.00000
+epoch 25/30  train_loss=0.8443  val_loss=0.8325  val_acc=0.8173  lr=0.00000  elapsed=225.0s
+epoch 26/30  train_loss=0.8045  val_loss=0.8271  val_acc=0.8662  lr=0.00000  elapsed=234.7s
+epoch 27/30  train_loss=0.8325  val_loss=0.9013  val_acc=0.8892  lr=0.00000  elapsed=244.5s
+  -> no improvement for 3 epochs, lr decayed to 0.00000
+epoch 28/30  train_loss=0.8877  val_loss=0.6793  val_acc=0.8616  lr=0.00000  elapsed=254.2s
+epoch 29/30  train_loss=0.8302  val_loss=0.7076  val_acc=0.8799  lr=0.00000  elapsed=264.0s
+epoch 30/30  train_loss=0.8547  val_loss=0.9081  val_acc=0.8427  lr=0.00000  elapsed=273.7s
+  -> no improvement for 3 epochs, lr decayed to 0.00000
+
+saved /Users/srijanupadhyay/Desktop/Project/papers-from-scratch/10_unet/logs/training_log.json
+saved /Users/srijanupadhyay/Desktop/Project/papers-from-scratch/10_unet/figures/training_curve.png
+saved /Users/srijanupadhyay/Desktop/Project/papers-from-scratch/10_unet/figures/sample_predictions.png
